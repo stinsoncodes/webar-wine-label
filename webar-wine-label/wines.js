@@ -44,10 +44,19 @@ export const WINES = {
       feather: 0.03,
     },
 
+    // Half-arc angle the panel wraps, in degrees. 0 is flat. A wine label is
+    // wrapped around a cylinder, and a flat panel reads as a card taped to the
+    // bottle — most visible at the left and right edges as you turn it.
+    // Tune with ?curve=NN; a 750ml Bordeaux bottle lands somewhere around 45-60.
+    curve: 0,
+
     // Static label image drawn behind the video, covering the whole target.
-    // This is what makes the seam land between two textures we control rather
-    // than between the video and the physical label under unknown lighting.
-    still: 'label.jpg',
+    // OFF (null) by default. It was on initially to control the seam, but the
+    // physical label is already there, correctly lit and correctly curved, and
+    // covering it with a flat photo of itself looked worse than the seam it was
+    // avoiding. Set to 'label.jpg' to re-enable if a video's edge won't sit
+    // quietly against the real label.
+    still: null,
 
     // Per-label tracker tuning. Omit to use the app defaults.
     // tracking: { filterMinCF: 0.0001, filterBeta: 0.001, missTolerance: 5 },

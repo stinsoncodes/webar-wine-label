@@ -50,6 +50,51 @@ AFRAME.registerShader('label-video', {
 })
 
 // ---------------------------------------------------------------------------
+// Curved panel geometry
+//
+// The label is wrapped around a cylinder; a flat plane reads as a card taped to
+// the bottle. `curve` is the half-arc angle the panel subtends, in degrees.
+//
+// Only z is displaced, never x. The texture is a photograph of the curved label,
+// so its horizontal axis is already the *projected* position R·sin(theta) — which
+// is exactly the flat mesh's x. Bending x as well would apply the foreshortening
+// twice and squeeze the middle of the face.
+// ---------------------------------------------------------------------------
+AFRAME.registerGeometry('curved-panel', {
+  schema: {
+    width:    { default: 1 },
+    height:   { default: 1 },
+    curve:    { default: 0 },
+    segments: { default: 48 },
+  },
+  init (data) {
+    const g = new THREE.PlaneGeometry(data.width, data.height, data.segments, 1)
+    const t = THREE.MathUtils.degToRad(data.curve)
+    if (t > 0.001) {
+      const sinT = Math.sin(t)
+      const cosT = Math.cos(t)
+      const R = (data.width / 2) / sinT          // chord half-width = R·sin(t)
+      const pos = g.attributes.position
+      for (let i = 0; i < pos.count; i++) {
+        const s = pos.getX(i) / (data.width / 2)               // -1..1
+        const c = Math.sqrt(Math.max(0, 1 - s * s * sinT * sinT))
+        pos.setZ(i, R * (c - cosT))                            // 0 at edges, bulges at centre
+      }
+      pos.needsUpdate = true
+      g.computeVertexNormals()
+    }
+    this.geometry = g
+  },
+})
+
+function panel (width, height, curve) {
+  const el = document.createElement('a-entity')
+  el.setAttribute('geometry',
+    `primitive: curved-panel; width: ${width}; height: ${height}; curve: ${curve}`)
+  return el
+}
+
+// ---------------------------------------------------------------------------
 // Wine selection
 // ---------------------------------------------------------------------------
 
@@ -175,6 +220,7 @@ function buildScene (w, dir, video) {
     w: num('vw', w.video.place?.w ?? 1),
   }
   let feather = num('feather', w.video.feather ?? 0)
+  let curve = num('curve', w.curve ?? 0)
 
   // Derive the video plane's height from the cropped frame so it is never
   // stretched. Depends on the real decoded size, hence the metadata wait.
@@ -220,10 +266,7 @@ function buildScene (w, dir, video) {
 
   const FOV = 80
   const cam = document.createElement('a-camera')
-  // In preview, back the camera off far enough to frame the whole label plus a
-  // margin: half-height / tan(fov/2), the standard fit-to-height distance.
-  const camZ = preview ? (labelH / 2) / Math.tan((FOV / 2) * Math.PI / 180) * 1.15 : 0
-  cam.setAttribute('position', `0 0 ${camZ.toFixed(4)}`)
+  cam.setAttribute('position', '0 0 0')
   cam.setAttribute('fov', FOV)
   cam.setAttribute('look-controls', 'enabled: false')
   cam.setAttribute('wasd-controls', 'enabled: false')
@@ -232,17 +275,18 @@ function buildScene (w, dir, video) {
   const anchor = document.createElement('a-entity')
   if (!preview) anchor.setAttribute('mindar-image-target', 'targetIndex: 0')
 
-  // Back plane: the whole label, so the video's edge blends against a texture we
-  // control rather than against the physical label under unknown room lighting.
+  // Optional back panel: a digital copy of the whole label. Off by default — the
+  // physical label is already there, perfectly registered and perfectly lit, and
+  // covering it with a photo of itself is strictly worse than leaving it alone.
+  // Turn it on only if the video's edge won't sit quietly against the real label.
+  let back = null
   if (w.still) {
-    const back = document.createElement('a-plane')
-    back.setAttribute('width', 1)
-    back.setAttribute('height', labelH)
+    back = panel(1, labelH, curve)
     back.setAttribute('material', 'shader: flat; src: #still; transparent: false')
     anchor.appendChild(back)
   }
 
-  const front = document.createElement('a-plane')
+  let front = panel(1, 1, curve)
   front.id = 'video-plane'
   anchor.appendChild(front)
   applyVideo()
@@ -252,9 +296,41 @@ function buildScene (w, dir, video) {
 
   function applyVideo () {
     const vh = place.w / croppedAspect
-    front.setAttribute('width', place.w)
-    front.setAttribute('height', vh)
-    front.setAttribute('position', `${place.x} ${place.y} 0.002`)
+    front.setAttribute('geometry',
+      `primitive: curved-panel; width: ${place.w}; height: ${vh}; curve: ${curve}`)
+    if (back) {
+      back.setAttribute('geometry',
+        `primitive: curved-panel; width: 1; height: ${labelH}; curve: ${curve}`)
+    }
+    // Nudged toward the viewer so it clears the physical label and, when the back
+    // panel is on, sits in front of it. Scales with curve: a deeper bulge needs
+    // more clearance at the edges to avoid z-fighting with the panel behind.
+    const z = 0.002 + curve * 0.0002
+    front.setAttribute('position', `${place.x} ${place.y} ${z.toFixed(5)}`)
+
+    // Frame the preview camera on whatever is actually rendered. With the back
+    // panel off, the label plane no longer exists and framing to its height would
+    // point the camera at empty space above the video.
+    if (preview) {
+      const fitH = back ? labelH : vh
+      const fitY = back ? 0 : place.y
+      const wide = back ? 1 : place.w
+      // A curved panel's centre sits this far toward the camera, so it has to be
+      // added to the fit distance or the bulge magnifies past the viewport.
+      const t = curve * Math.PI / 180
+      const bulge = t > 0.001
+        ? ((wide / 2) / Math.sin(t)) * (1 - Math.cos(t))
+        : 0
+      // FOV is vertical, so on a portrait phone the horizontal field is much
+      // narrower and is usually the binding constraint. Fit both, take the
+      // further of the two.
+      const tanV = Math.tan((FOV / 2) * Math.PI / 180)
+      const aspect = window.innerWidth / window.innerHeight
+      const dH = (fitH / 2) / tanV
+      const dW = (wide / 2) / (tanV * aspect)
+      const d = Math.max(dH, dW) * 1.12 + bulge
+      cam.setAttribute('position', `0 ${fitY.toFixed(4)} ${d.toFixed(4)}`)
+    }
     front.setAttribute('material', [
       'shader: label-video',
       'src: #avatar',
@@ -313,6 +389,7 @@ function buildScene (w, dir, video) {
       ['cx',      'crop x',  () => crop.x,   v => crop.x = v,   0.005],
       ['cw',      'crop w',  () => crop.w,   v => crop.w = v,   0.005],
       ['feather', 'feather', () => feather,  v => feather = v,  0.005],
+      ['curve',   'curve°',  () => curve,    v => curve = v,    2],
     ]
     const host = $('tune-rows')
     rows.forEach(([key, label, get, set, step]) => {
@@ -337,7 +414,8 @@ function buildScene (w, dir, video) {
       if (act === 'hide') $('tune').hidden = true
       if (act === 'copy') {
         const snippet =
-`    video: {
+`    curve: ${curve},
+    video: {
       file: '${w.video.file}',
       crop: { x: ${crop.x}, y: ${crop.y}, w: ${crop.w}, h: ${crop.h} },
       place: { x: ${place.x}, y: ${place.y}, w: ${place.w} },
