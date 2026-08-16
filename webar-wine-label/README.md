@@ -123,6 +123,16 @@ element user-activated, so playback on `targetFound` is allowed to carry sound. 
 scene isn't attached until that tap either, which puts the camera prompt behind a
 deliberate action rather than a page load.
 
+**Caching (`vercel.json`).** `/assets/*` gets `max-age=3600` — those files are large and
+change rarely, and re-downloading a 700 KB `.mind` on every phone reload is painful.
+Everything else is `no-store`, because code and manifest change constantly during
+alignment and a cached copy silently invalidates a test.
+
+Do not add explanatory keys to `vercel.json`. Its schema rejects any property it does
+not recognise — a `"comment"` field inside a headers rule fails the build with
+*"should NOT have additional property"*, and because a failed build keeps serving the
+previous deployment, the symptom looks like the deploy simply not happening.
+
 **Curvature.** MindAR fits a flat homography, but a wine label is wrapped around a
 cylinder. Registration is good in the centre and drifts at the left and right edges.
 If it becomes objectionable, the fix is a curved geometry matching the bottle radius
