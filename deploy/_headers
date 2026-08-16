@@ -1,0 +1,8 @@
+# Cloudflare Pages / Netlify both read this file. VERCEL DOES NOT — it is inert there,
+# and vercel.json in this directory carries the same no-store rule. Kept only so the
+# harness still behaves correctly if it moves hosts. Change both or neither.
+# This is a throwaway test harness that gets re-uploaded repeatedly, and a cached
+# copy of an older build silently invalidates a measurement. Correctness beats
+# performance here; drop this file when the real app ships.
+/*
+  Cache-Control: no-store

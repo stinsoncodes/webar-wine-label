@@ -1,0 +1,140 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Tracking Test</title>
+
+<!-- Versions pinned deliberately. mind-ar 1.2.5 is tested against A-Frame 1.3.0;
+     newer A-Frame builds are a known cause of a silently blank scene. -->
+<script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+<style>
+  body { margin: 0; overflow: hidden; font: 13px/1.45 system-ui, sans-serif; }
+  #hud { position: fixed; z-index: 10; top: 8px; left: 8px; background: rgba(0,0,0,.75);
+         color: #eee; padding: 10px 12px; border-radius: 6px; font-variant-numeric: tabular-nums;
+         pointer-events: none; }
+  #hud b { display: inline-block; min-width: 128px; color: #9ab; font-weight: 400; }
+  #state { font-size: 17px; font-weight: 600; }
+  .lock { color: #5f5; } .miss { color: #f77; }
+  #reset { position: fixed; z-index: 10; bottom: 12px; left: 8px; font: inherit; padding: 8px 14px;
+           border-radius: 6px; border: 1px solid #555; background: #222; color: #eee; }
+</style>
+
+<div id="hud">
+  <div><b>Status</b><span id="state" class="miss">initialising</span></div>
+  <div><b>Locked target</b><span id="idx">–</span></div>
+  <div><b>Time to first lock</b><span id="ttl">–</span></div>
+  <div><b>Locked (session)</b><span id="pct">–</span></div>
+  <div><b>Lock / loss events</b><span id="ev">0 / 0</span></div>
+</div>
+<button id="reset">Reset stats</button>
+
+<script>
+const q = new URLSearchParams(location.search);
+const num = Math.max(1, parseInt(q.get('targets') || '1', 10));
+
+// Tracker tuning, overridable from the query string so you can A/B without editing files.
+//   filterMinCF  lower  = smoother, laggier
+//   filterBeta   higher = snappier, jitterier
+//   missTolerance  frames of loss tolerated before firing targetLost
+const cfg = [
+  'imageTargetSrc: ./targets.mind',
+  'maxTrack: 1',
+  'uiScanning: no',
+  'uiLoading: no',
+  'filterMinCF: '      + (q.get('filterMinCF')      || '0.0001'),
+  'filterBeta: '       + (q.get('filterBeta')       || '0.001'),
+  'missTolerance: '    + (q.get('missTolerance')    || '5'),
+  'warmupTolerance: '  + (q.get('warmupTolerance')  || '5'),
+].join('; ');
+
+// Built in JS rather than markup so `?targets=N` only creates anchors that actually
+// exist in the .mind file. Declaring anchors past the end is a silent dead end.
+const scene = document.createElement('a-scene');
+scene.setAttribute('mindar-image', cfg);
+scene.setAttribute('color-space', 'sRGB');
+scene.setAttribute('renderer', 'colorManagement: true, physicallyCorrectLights');
+scene.setAttribute('vr-mode-ui', 'enabled: false');
+scene.setAttribute('device-orientation-permission-ui', 'enabled: false');
+scene.setAttribute('embedded', '');
+
+const cam = document.createElement('a-camera');
+cam.setAttribute('position', '0 0 0');
+cam.setAttribute('look-controls', 'enabled: false');
+scene.appendChild(cam);
+
+// A flat wireframe quad plus a solid centre dot. No video, no shader: if this jitters
+// or drops, the cause is tracking, not the rest of the stack.
+for (let i = 0; i < num; i++) {
+  const anchor = document.createElement('a-entity');
+  anchor.setAttribute('mindar-image-target', 'targetIndex: ' + i);
+
+  const quad = document.createElement('a-plane');
+  quad.setAttribute('width', '1');
+  quad.setAttribute('height', '0.552');   // replaced automatically below once known
+  quad.setAttribute('color', '#00ff88');
+  quad.setAttribute('wireframe', 'true');
+  anchor.appendChild(quad);
+
+  const dot = document.createElement('a-circle');
+  dot.setAttribute('radius', '0.04');
+  dot.setAttribute('color', '#00ff88');
+  dot.setAttribute('position', '0 0 0.001');
+  anchor.appendChild(dot);
+
+  anchor.addEventListener('targetFound', () => onFound(i));
+  anchor.addEventListener('targetLost', onLost);
+  scene.appendChild(anchor);
+}
+document.body.appendChild(scene);
+
+// ---- stats ----
+const el = id => document.getElementById(id);
+let t0 = null, firstLock = null, locked = false, lockedMs = 0, lastTick = null;
+let nFound = 0, nLost = 0;
+
+scene.addEventListener('arReady', () => {
+  t0 = performance.now(); lastTick = t0;
+  setState('scanning', false);
+});
+scene.addEventListener('arError', () => setState('AR ERROR – see console', false));
+
+function setState(text, isLocked) {
+  el('state').textContent = text;
+  el('state').className = isLocked ? 'lock' : 'miss';
+}
+
+function onFound(i) {
+  locked = true; nFound++;
+  if (firstLock === null && t0 !== null) {
+    firstLock = performance.now() - t0;
+    el('ttl').textContent = (firstLock / 1000).toFixed(2) + ' s';
+  }
+  el('idx').textContent = '#' + i;
+  setState('LOCKED', true);
+  el('ev').textContent = nFound + ' / ' + nLost;
+}
+
+function onLost() {
+  locked = false; nLost++;
+  el('idx').textContent = '–';
+  setState('searching', false);
+  el('ev').textContent = nFound + ' / ' + nLost;
+}
+
+// Percentage of wall-clock time held in lock since arReady. This is the number that
+// decides feasibility: sustained lock while the bottle is turning is what matters,
+// not whether it can find the target once under ideal conditions.
+setInterval(() => {
+  if (t0 === null) return;
+  const now = performance.now();
+  if (locked) lockedMs += now - lastTick;
+  lastTick = now;
+  el('pct').textContent = ((lockedMs / (now - t0)) * 100).toFixed(1) + '%';
+}, 100);
+
+el('reset').onclick = () => {
+  t0 = lastTick = performance.now();
+  firstLock = null; lockedMs = 0; nFound = nLost = 0;
+  el('ttl').textContent = '–'; el('ev').textContent = '0 / 0';
+};
+</script>

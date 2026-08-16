@@ -1,0 +1,61 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WebAR tracking spike</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 28px 22px calc(28px + env(safe-area-inset-bottom));
+         background: #121214; color: #e8e8ea;
+         font: 16px/1.55 -apple-system, system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 26px; color: #8b8b93; font-size: 14px; }
+  a.card { display: block; text-decoration: none; color: inherit; background: #1d1d21;
+           border: 1px solid #303036; border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; }
+  a.card:active { background: #26262c; }
+  a.card b { display: block; font-size: 17px; color: #fff; margin-bottom: 3px; }
+  a.card span { font-size: 13.5px; color: #93939c; }
+  ol { padding-left: 20px; margin: 0; color: #b8b8c0; font-size: 14px; }
+  ol li { margin-bottom: 9px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em;
+       color: #6f6f78; margin: 32px 0 12px; font-weight: 600; }
+  code { background: #26262c; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+</style>
+
+<h1>WebAR tracking spike</h1>
+<p class="sub">19 Crimes label &middot; MindAR feasibility test</p>
+
+<a class="card" href="./tracking-test.html">
+  <b>Tracking test &rarr;</b>
+  <span>Green wireframe locks to the label. This is the one that matters.</span>
+</a>
+
+<a class="card" href="./camera-check.html">
+  <b>Camera check &rarr;</b>
+  <span>Live preview and a focus score. Use it to find the right holding distance.</span>
+</a>
+
+<h2>How to run it</h2>
+<ol>
+  <li>Open <b>Tracking test</b> and allow camera access. It uses the rear camera.</li>
+  <li>Centre the label in frame, filling roughly a third of the screen height.</li>
+  <li>Hold steady until it reads <b>LOCKED</b>, then tap <b>Reset stats</b> &mdash;
+      everything before that point is setup noise and shouldn't count.</li>
+  <li>Hold still for 5 seconds, then rotate the bottle slowly through
+      &plusmn;40&deg;. Tilt it. Move it nearer and further.</li>
+  <li>Report <b>Locked (session)</b> and <b>Lock / loss events</b>, and whether the
+      wireframe sat squarely on the label or swam around.</li>
+</ol>
+
+<h2>Reading the result</h2>
+<ol style="list-style:none; padding-left:0">
+  <li><b style="color:#5f5">&gt;90%</b> through rotation &mdash; good, build it.</li>
+  <li><b style="color:#fc0">60&ndash;90%</b> &mdash; try multi-angle targets before concluding.</li>
+  <li><b style="color:#f77">&lt;60%</b> &mdash; the target needs rethinking, not the code.</li>
+</ol>
+
+<h2>Tuning</h2>
+<p style="color:#93939c; font-size:14px; margin:0">
+  The tracker's filters are query-string overridable, e.g.
+  <code>tracking-test.html?filterBeta=0.01</code>. Params:
+  <code>targets</code>, <code>filterMinCF</code>, <code>filterBeta</code>,
+  <code>missTolerance</code>, <code>warmupTolerance</code>.
+</p>

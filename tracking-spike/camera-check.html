@@ -1,0 +1,115 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Camera Check</title>
+<style>
+  body { margin: 0; background: #111; color: #eee; font: 14px/1.5 system-ui, sans-serif; }
+  header { padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  select { font: inherit; padding: 6px; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; }
+  #wrap { position: relative; width: 100%; max-width: 1280px; margin: 0 auto; }
+  video { width: 100%; display: block; background: #000; }
+  #hud { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.7); padding: 10px 12px;
+         border-radius: 6px; font-variant-numeric: tabular-nums; }
+  #hud b { display: inline-block; min-width: 130px; color: #9ab; font-weight: 400; }
+  #sharp { font-size: 20px; font-weight: 600; }
+  .note { padding: 8px 16px; color: #999; max-width: 70ch; }
+</style>
+
+<header>
+  <label>Camera: <select id="cams"></select></label>
+  <span id="err" style="color:#f77"></span>
+</header>
+
+<div id="wrap">
+  <video id="v" playsinline muted autoplay></video>
+  <div id="hud">
+    <div><b>Resolution</b><span id="res">–</span></div>
+    <div><b>Frame rate</b><span id="fps">–</span></div>
+    <div><b>Sharpness</b><span id="sharp">–</span></div>
+  </div>
+</div>
+
+<p class="note">
+  Sharpness is a relative focus score (variance of Laplacian). Hold the label at the
+  distance you expect users to hold a phone and maximise this number. Compare cameras
+  with the same subject at the same distance &mdash; the absolute value means nothing on its own.
+</p>
+
+<script>
+const v = document.getElementById('v');
+const cams = document.getElementById('cams');
+const err = document.getElementById('err');
+let stream = null;
+
+async function start(deviceId) {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  err.textContent = '';
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: deviceId ? { deviceId: { exact: deviceId } }
+                      : { facingMode: { ideal: 'environment' } },
+      audio: false
+    });
+  } catch (e) {
+    err.textContent = e.name + ': ' + e.message;
+    return;
+  }
+  v.srcObject = stream;
+  const s = stream.getVideoTracks()[0].getSettings();
+  document.getElementById('res').textContent = s.width + ' × ' + s.height;
+  document.getElementById('fps').textContent = s.frameRate ? Math.round(s.frameRate) + ' fps' : 'unknown';
+}
+
+async function listCams() {
+  const devs = await navigator.mediaDevices.enumerateDevices();
+  const vids = devs.filter(d => d.kind === 'videoinput');
+  cams.innerHTML = '';
+  vids.forEach((d, i) => {
+    const o = document.createElement('option');
+    o.value = d.deviceId;
+    o.textContent = d.label || ('Camera ' + (i + 1));
+    cams.appendChild(o);
+  });
+}
+
+cams.onchange = () => start(cams.value);
+
+// Rolling sharpness: variance of a 3x3 Laplacian over a downscaled grayscale centre crop.
+const cv = document.createElement('canvas');
+cv.width = cv.height = 160;
+const cx = cv.getContext('2d', { willReadFrequently: true });
+const out = document.getElementById('sharp');
+let ema = null;
+
+function tick() {
+  if (v.videoWidth) {
+    // Centre crop, so the score reflects the subject rather than the background.
+    const side = Math.min(v.videoWidth, v.videoHeight) * 0.5;
+    cx.drawImage(v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, 160, 160);
+    const d = cx.getImageData(0, 0, 160, 160).data;
+    const g = new Float32Array(160 * 160);
+    for (let i = 0; i < g.length; i++) {
+      g[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+    }
+    let sum = 0, sumSq = 0, n = 0;
+    for (let y = 1; y < 159; y++) {
+      for (let x = 1; x < 159; x++) {
+        const i = y * 160 + x;
+        const l = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - 160] - g[i + 160];
+        sum += l; sumSq += l * l; n++;
+      }
+    }
+    const varr = sumSq / n - (sum / n) ** 2;
+    ema = ema === null ? varr : ema * 0.85 + varr * 0.15;
+    out.textContent = ema.toFixed(0);
+  }
+  requestAnimationFrame(tick);
+}
+
+(async () => {
+  await start();          // prompt first, so enumerateDevices() returns real labels
+  await listCams();
+  const cur = stream && stream.getVideoTracks()[0].getSettings().deviceId;
+  if (cur) cams.value = cur;
+  tick();
+})();
+</script>

@@ -1,0 +1,97 @@
+<meta charset="utf-8">
+<title>MindAR compile</title>
+<!-- NB: mindar-image.prod.js (unlike the -aframe build) ships as an ES module.
+     A classic <script src> tag loads nothing and leaves window.MINDAR undefined,
+     so it gets imported from the module script at the bottom instead. -->
+<style>
+  body { font: 14px/1.6 ui-monospace, monospace; background: #111; color: #ddd; padding: 20px; }
+  #log { white-space: pre-wrap; }
+  canvas { border: 1px solid #444; max-width: 100%; margin-top: 12px; }
+  .ok { color: #5f5; } .bad { color: #f77; }
+</style>
+
+<div id="log">starting…</div>
+<canvas id="viz"></canvas>
+
+<script type="module">
+import 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
+
+// Images to compile, in order. Each becomes a targetIndex in the output .mind.
+// Add more entries here to build a multi-angle target set.
+const SOURCES = ['/source/label.jpg'];
+const SAVE_KEY = 'spike';
+
+const logEl = document.getElementById('log');
+const say = (m, cls) => {
+  logEl.innerHTML += '\n' + (cls ? `<span class="${cls}">${m}</span>` : m);
+  console.log(m);
+};
+
+window.__done = false;
+window.__error = null;
+window.__stats = null;
+
+const loadImage = src => new Promise((res, rej) => {
+  const i = new Image();
+  i.onload = () => res(i);
+  i.onerror = () => rej(new Error('could not load ' + src));
+  i.src = src;
+});
+
+(async () => {
+  try {
+    const images = [];
+    for (const src of SOURCES) {
+      const img = await loadImage(src);
+      say(`loaded ${src}  ${img.width}×${img.height}`);
+      images.push(img);
+    }
+
+    const compiler = new window.MINDAR.IMAGE.Compiler();
+    say('compiling… (this takes a while; the tab will look frozen)');
+
+    let last = -1;
+    const dataList = await compiler.compileImageTargets(images, p => {
+      const pct = Math.floor(p);
+      if (pct >= last + 10) { last = pct; say('  ' + pct + '%'); }
+    });
+
+    // Feature-point counts per tracking scale. This is the number that says whether
+    // the label is a usable target, so surface it rather than just writing the file.
+    const stats = dataList.map((d, i) => {
+      const perScale = d.trackingImageList.map((i2, s) =>
+        (d.trackingData[s] ? d.trackingData[s].points.length : 0));
+      const matching = d.matchingData.reduce((n, m) => n + m.maximaPoints.length + m.minimaPoints.length, 0);
+      return { target: i, matchingPoints: matching, trackingPointsPerScale: perScale };
+    });
+    window.__stats = stats;
+    say('\nfeature points:\n' + JSON.stringify(stats, null, 2), 'ok');
+
+    const buffer = await compiler.exportData();
+    const r = await fetch('/save/' + SAVE_KEY, { method: 'POST', body: buffer });
+    say('\n' + (await r.text()), r.ok ? 'ok' : 'bad');
+
+    // Draw target 0's keypoints so the distribution can be eyeballed, not just counted.
+    const d0 = dataList[0];
+    const base = d0.trackingImageList[0];
+    const cv = document.getElementById('viz');
+    cv.width = base.width; cv.height = base.height;
+    const cx = cv.getContext('2d');
+    const id = cx.createImageData(base.width, base.height);
+    for (let i = 0; i < base.data.length; i++) {
+      id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = base.data[i];
+      id.data[i * 4 + 3] = 255;
+    }
+    cx.putImageData(id, 0, 0);
+    cx.fillStyle = '#00ff88';
+    (d0.trackingData[0] ? d0.trackingData[0].points : []).forEach(p => {
+      cx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3);
+    });
+
+    window.__done = true;
+  } catch (e) {
+    window.__error = e.message;
+    say('FAILED: ' + e.message, 'bad');
+  }
+})();
+</script>

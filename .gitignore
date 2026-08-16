@@ -1,0 +1,10 @@
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+node_modules/
+.vercel/
+
+# OneDrive conflict copies
+*conflicted copy*
