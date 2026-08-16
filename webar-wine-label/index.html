@@ -1,0 +1,54 @@
+<!-- Scene markup is built in app.js from the wines.js manifest, because the target
+     count, asset paths and plane geometry all vary per wine. Declaring anchors in
+     static markup would mean one hand-edited page per bottle. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d0d0f">
+<title>Talking Wine Label</title>
+<link rel="stylesheet" href="./style.css">
+
+<!-- Pinned deliberately. mind-ar 1.2.5 is tested against A-Frame 1.3.0; an
+     unpinned "latest" A-Frame is a known cause of a silently blank scene.
+     Unlike mindar-image.prod.js, the -aframe build is a classic script. -->
+<script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+<!-- Wine picker: shown when no ?wine= is given, or the id isn't in the manifest. -->
+<div id="picker" hidden>
+  <h1>Talking Wine Label</h1>
+  <p class="sub">Scan the code on a bottle, or choose one.</p>
+  <div id="picker-list"></div>
+  <p class="hint" id="picker-hint" hidden></p>
+</div>
+
+<!-- Tap-to-begin gate. Required: mobile browsers block audio-enabled playback
+     that isn't the direct result of a user gesture. -->
+<div id="gate" hidden>
+  <div class="gate-inner">
+    <div id="gate-label"></div>
+    <button id="gate-btn" type="button">Tap to begin</button>
+    <p class="hint">Uses your camera. Nothing is recorded or uploaded.</p>
+  </div>
+</div>
+
+<!-- Scanning prompt while the tracker searches. -->
+<div id="scan" hidden>
+  <div class="reticle"><span></span><span></span><span></span><span></span></div>
+  <p>Align the label within the frame</p>
+</div>
+
+<div id="fatal" hidden><div><h2>Can't start</h2><p id="fatal-msg"></p></div></div>
+
+<!-- Alignment panel, ?tune=1. Nudges plane geometry live and prints a manifest
+     snippet to paste back into wines.js. -->
+<div id="tune" hidden>
+  <div id="tune-rows"></div>
+  <div class="tune-actions">
+    <button type="button" data-act="copy">Copy manifest</button>
+    <button type="button" data-act="hide">Hide</button>
+  </div>
+  <pre id="tune-out" hidden></pre>
+</div>
+
+<script type="module" src="./app.js"></script>

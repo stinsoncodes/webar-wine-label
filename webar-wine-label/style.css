@@ -1,0 +1,144 @@
+:root {
+  color-scheme: dark;
+  --bg: #0d0d0f;
+  --fg: #f0efec;
+  --dim: #8d8d96;
+  --accent: #b8332f;      /* the label's sealing-wax red */
+  --pad-b: env(safe-area-inset-bottom);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A-Frame injects its own canvas; keep it under every overlay. */
+a-scene { position: fixed; inset: 0; }
+
+[hidden] { display: none !important; }
+
+/* ---------- shared overlay shell ---------- */
+
+#picker, #gate, #fatal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 32px 24px calc(32px + var(--pad-b));
+  background: var(--bg);
+}
+
+#gate { text-align: center; align-items: center; }
+#fatal { align-items: center; text-align: center; }
+
+h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -0.01em; }
+h2 { font-size: 19px; margin: 0 0 8px; }
+p.sub { margin: 0 0 28px; color: var(--dim); font-size: 14.5px; }
+p.hint { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
+
+/* ---------- picker ---------- */
+
+#picker-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+
+.wine {
+  display: block;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-decoration: none;
+  background: #1b1b1f;
+  border: 1px solid #2e2e35;
+  border-radius: 12px;
+  padding: 15px 17px;
+}
+.wine:active { background: #24242b; }
+.wine b { display: block; font-size: 17px; }
+.wine span { font-size: 13.5px; color: var(--dim); }
+
+/* ---------- tap gate ---------- */
+
+.gate-inner { max-width: 340px; }
+#gate-label { font-size: 21px; margin-bottom: 26px; line-height: 1.35; }
+#gate-label span { display: block; color: var(--dim); font-size: 15px; margin-top: 3px; }
+
+#gate-btn {
+  font: 600 17px/1 inherit;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 999px;
+  padding: 17px 40px;
+  width: 100%;
+  max-width: 300px;
+}
+#gate-btn:active { filter: brightness(0.86); }
+
+/* ---------- scanning prompt ---------- */
+
+#scan {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  pointer-events: none;   /* never intercept a tap meant for the scene */
+}
+#scan p {
+  margin: 0;
+  font-size: 14.5px;
+  background: rgba(0,0,0,.62);
+  padding: 9px 17px;
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+}
+
+/* Four corner brackets, sized to a portrait label rather than a square. */
+.reticle { position: relative; width: 46vw; max-width: 240px; aspect-ratio: 1 / 2.1; }
+.reticle span { position: absolute; width: 26px; height: 26px; border: 2.5px solid rgba(255,255,255,.82); }
+.reticle span:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-radius: 5px 0 0 0; }
+.reticle span:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; border-radius: 0 5px 0 0; }
+.reticle span:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 5px; }
+.reticle span:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; border-radius: 0 0 5px 0; }
+
+@keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+.reticle span { animation: pulse 2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .reticle span { animation: none; opacity: .8; } }
+
+/* ---------- alignment panel ---------- */
+
+#tune {
+  position: fixed;
+  z-index: 30;
+  left: 8px; right: 8px; bottom: calc(8px + var(--pad-b));
+  background: rgba(10,10,12,.93);
+  border: 1px solid #33333b;
+  border-radius: 11px;
+  padding: 9px 11px;
+  font: 12px/1.35 ui-monospace, Menlo, monospace;
+  backdrop-filter: blur(8px);
+}
+.tune-row { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+.tune-row label { width: 74px; color: var(--dim); }
+.tune-row output { width: 62px; text-align: right; font-variant-numeric: tabular-nums; }
+.tune-row button, .tune-actions button {
+  font: inherit; color: var(--fg); background: #26262e;
+  border: 1px solid #3a3a44; border-radius: 6px; padding: 5px 10px; min-width: 34px;
+}
+.tune-row button:active, .tune-actions button:active { background: #34343e; }
+.tune-actions { display: flex; gap: 7px; margin-top: 7px; }
+.tune-actions button { flex: 1; padding: 8px; }
+#tune-out { margin: 8px 0 0; padding: 8px; background: #17171c; border-radius: 7px;
+            max-height: 34vh; overflow: auto; white-space: pre; font-size: 11px; }
