@@ -123,6 +123,14 @@ element user-activated, so playback on `targetFound` is allowed to carry sound. 
 scene isn't attached until that tap either, which puts the camera prompt behind a
 deliberate action rather than a page load.
 
+**Never give `body` a background.** MindAR inserts its camera feed as a `<video>` at
+`z-index: -2`. A background on the *root* element paints into the viewport canvas
+first, underneath everything — but a background on `body` paints as an ordinary box,
+which in CSS painting order comes *after* negative-z-index descendants. So an opaque
+`body` background hides the camera and the AR renders over solid black while tracking
+appears to work perfectly. Page colour lives on `html`; the full-screen overlays each
+carry their own.
+
 **Caching (`vercel.json`).** `/assets/*` gets `max-age=3600` — those files are large and
 change rarely, and re-downloading a 700 KB `.mind` on every phone reload is painful.
 Everything else is `no-store`, because code and manifest change constantly during

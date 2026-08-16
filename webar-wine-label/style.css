@@ -12,15 +12,26 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: var(--bg);
   color: var(--fg);
   font: 16px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
-/* A-Frame injects its own canvas; keep it under every overlay. */
+/* MindAR inserts its camera feed as a <video> at z-index -2, behind A-Frame's
+   canvas. CSS paints a *root element* background into the viewport canvas first,
+   but a *body* background paints as an ordinary box — which is after negative
+   z-index descendants. So an opaque body background hides the camera entirely and
+   the AR renders over black.
+   Keep the page colour on html only. Every full-screen overlay sets its own
+   opaque background, so nothing else needs one. */
+html { background: var(--bg); }
+body { background: transparent; }
+
+/* A-Frame injects its own canvas; keep it under every overlay, and transparent so
+   the camera feed behind it shows through. */
 a-scene { position: fixed; inset: 0; }
+a-scene .a-canvas { background: transparent !important; }
 
 [hidden] { display: none !important; }
 
