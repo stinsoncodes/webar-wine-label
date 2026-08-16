@@ -8,12 +8,16 @@ const num = (k, fallback) => {
 }
 
 // ---------------------------------------------------------------------------
-// Video shader: UV crop + edge feather
+// Video shader: UV crop, per-edge feather, exposure/white-balance gain
 //
-// The crop exists because generators pillarbox their output; doing it here means
-// a new clip never has to be re-encoded to be usable. The feather softens the
-// plane's outer edge so a small misalignment against the static label reads as a
-// soft transition instead of a hard rectangle.
+// crop      — generators pillarbox their output; cropping here means a new clip
+//             never has to be re-encoded to be usable.
+// featherUV — fade widths per edge, in UV, ordered top/right/bottom/left. The
+//             edges are not equivalent: the top boundary lands on the printed
+//             torn-paper edge and wants to stay crisp, while the sides and bottom
+//             cut across flat dark tone and want to dissolve.
+// gain      — per-channel multiplier driven by the live camera feed, so the clip's
+//             baked exposure follows the room instead of fighting it.
 // ---------------------------------------------------------------------------
 AFRAME.registerShader('label-video', {
   // `is: 'uniform'` is not optional — without it A-Frame treats these as plain
@@ -23,7 +27,8 @@ AFRAME.registerShader('label-video', {
     src:        { type: 'map',  is: 'uniform' },
     cropOffset: { type: 'vec2', is: 'uniform', default: { x: 0, y: 0 } },
     cropScale:  { type: 'vec2', is: 'uniform', default: { x: 1, y: 1 } },
-    featherUV:  { type: 'vec2', is: 'uniform', default: { x: 0, y: 0 } },
+    featherUV:  { type: 'vec4', is: 'uniform', default: { x: 0, y: 0, z: 0, w: 0 } },
+    gain:       { type: 'vec3', is: 'uniform', default: { x: 1, y: 1, z: 1 } },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -36,15 +41,22 @@ AFRAME.registerShader('label-video', {
     uniform sampler2D src;
     uniform vec2 cropOffset;
     uniform vec2 cropScale;
-    uniform vec2 featherUV;
+    uniform vec4 featherUV;   // top, right, bottom, left
+    uniform vec3 gain;
     varying vec2 vUv;
+
+    // Distance-to-edge ramp; a width of 0 disables that edge entirely.
+    float edge(float d, float w) {
+      return w > 0.0 ? smoothstep(0.0, w, d) : 1.0;
+    }
+
     void main() {
       vec4 c = texture2D(src, cropOffset + vUv * cropScale);
-      float ax = featherUV.x > 0.0
-        ? smoothstep(0.0, featherUV.x, min(vUv.x, 1.0 - vUv.x)) : 1.0;
-      float ay = featherUV.y > 0.0
-        ? smoothstep(0.0, featherUV.y, min(vUv.y, 1.0 - vUv.y)) : 1.0;
-      gl_FragColor = vec4(c.rgb, c.a * ax * ay);
+      float a = edge(1.0 - vUv.y, featherUV.x)   // top
+              * edge(1.0 - vUv.x, featherUV.y)   // right
+              * edge(vUv.y,       featherUV.z)   // bottom
+              * edge(vUv.x,       featherUV.w);  // left
+      gl_FragColor = vec4(c.rgb * gain, c.a * a);
     }
   `,
 })
@@ -92,6 +104,38 @@ function panel (width, height, curve) {
   el.setAttribute('geometry',
     `primitive: curved-panel; width: ${width}; height: ${height}; curve: ${curve}`)
   return el
+}
+
+// Half-arc angle, in degrees, that a chord of `chordMm` subtends on a cylinder of
+// `diameterMm`. Lets a manifest state the two things that are actually measurable
+// about a bottle rather than a magic angle nobody can re-derive later.
+function curveFromBottle (chordMm, diameterMm) {
+  if (!chordMm || !diameterMm) return 0
+  const s = (chordMm / 2) / (diameterMm / 2)
+  if (!(s > 0)) return 0
+  if (s > 1.001) {
+    // Chord wider than the bottle is impossible; the data is wrong, and guessing
+    // an angle would hide that. Stay flat and say so.
+    console.warn(`chordMm ${chordMm} exceeds bottle diameter ${diameterMm}; curve disabled`)
+    return 0
+  }
+  // s == 1 is a label wrapping exactly to the silhouette — real, and 90° is the
+  // right answer. Clamp just below to keep asin and the 1/sin in the geometry finite.
+  return Math.asin(Math.min(s, 0.9999)) * 180 / Math.PI
+}
+
+// `feather` may be a scalar, {top, side, bottom}, or {top, right, bottom, left}.
+// Always returns all four, in label-width units, CSS order.
+function normaliseFeather (f) {
+  if (typeof f === 'number') return { top: f, right: f, bottom: f, left: f }
+  if (!f) return { top: 0, right: 0, bottom: 0, left: 0 }
+  const side = f.side ?? 0
+  return {
+    top:    f.top    ?? 0,
+    right:  f.right  ?? side,
+    bottom: f.bottom ?? 0,
+    left:   f.left   ?? side,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -219,8 +263,38 @@ function buildScene (w, dir, video) {
     y: num('vy', w.video.place?.y ?? 0),
     w: num('vw', w.video.place?.w ?? 1),
   }
-  let feather = num('feather', w.video.feather ?? 0)
-  let curve = num('curve', w.curve ?? 0)
+  const f0 = normaliseFeather(w.video.feather)
+  const feather = {
+    top:    num('ft', num('feather', f0.top)),
+    right:  num('fr', num('feather', f0.right)),
+    bottom: num('fb', num('feather', f0.bottom)),
+    left:   num('fl', num('feather', f0.left)),
+  }
+
+  // Explicit `curve` wins; otherwise derive it from the bottle's real geometry.
+  let curve = num('curve',
+    w.curve ?? curveFromBottle(w.target.chordMm, w.bottle?.diameterMm))
+
+  // Live exposure / white-balance match against the camera feed.
+  // ?gain=N pins a fixed gain and disables the loop; ?match=0 turns it off entirely.
+  const MATCH = {
+    enabled:    true,
+    color:      0.6,      // 0 = luminance only, 1 = full per-channel white balance
+    min:        0.55,
+    max:        1.8,
+    smoothing:  0.12,
+    intervalMs: 120,
+    sampleFrac: 0.55,
+    ...(w.match || {}),
+  }
+  for (const k of ['color', 'min', 'max', 'smoothing', 'intervalMs', 'sampleFrac']) {
+    MATCH[k] = num(k === 'color' ? 'mcolor' : 'm' + k.toLowerCase(), MATCH[k])
+  }
+  const fixedGain = parseFloat(q.get('gain'))
+  const gain = Number.isFinite(fixedGain)
+    ? [fixedGain, fixedGain, fixedGain]
+    : [1, 1, 1]
+  const matchOn = MATCH.enabled && q.get('match') !== '0' && !Number.isFinite(fixedGain)
 
   // Derive the video plane's height from the cropped frame so it is never
   // stretched. Depends on the real decoded size, hence the metadata wait.
@@ -331,15 +405,33 @@ function buildScene (w, dir, video) {
       const d = Math.max(dH, dW) * 1.12 + bulge
       cam.setAttribute('position', `0 ${fitY.toFixed(4)} ${d.toFixed(4)}`)
     }
+    // Feather is authored in label-width units; the shader works in UV, so
+    // horizontals divide by the panel's width and verticals by its height.
+    const fUV = [
+      feather.top / vh,
+      feather.right / place.w,
+      feather.bottom / vh,
+      feather.left / place.w,
+    ].map(v => Math.min(0.499, Math.max(0, v)))
+
     front.setAttribute('material', [
       'shader: label-video',
       'src: #avatar',
       'transparent: true',
       `cropOffset: ${crop.x} ${crop.y}`,
       `cropScale: ${crop.w} ${crop.h}`,
-      // Feather is authored in label-width units; the shader works in UV.
-      `featherUV: ${feather / place.w} ${feather / vh}`,
+      `featherUV: ${fUV.join(' ')}`,
+      `gain: ${gain.join(' ')}`,
     ].join('; '))
+  }
+
+  // Re-push only the gain uniform. The matcher runs several times a second, and
+  // going through setAttribute('material', ...) each time would re-parse the whole
+  // material and thrash the shader.
+  function pushGain () {
+    const mesh = front.getObject3D('mesh')
+    const u = mesh && mesh.material && mesh.material.uniforms
+    if (u && u.gain) u.gain.value.set(gain[0], gain[1], gain[2])
   }
 
   // --- tracking events -----------------------------------------------------
@@ -352,11 +444,124 @@ function buildScene (w, dir, video) {
     return
   }
 
+  // --- exposure matching ---------------------------------------------------
+  //
+  // Sample the camera feed where the target actually is, sample the clip's cropped
+  // region, and scale the clip so the two agree. Valid here precisely because the
+  // video content *is* the label content, so it is a like-for-like comparison.
+
+  const sampler = (() => {
+    const mk = () => {
+      const c = document.createElement('canvas')
+      c.width = c.height = 24
+      return { c, x: c.getContext('2d', { willReadFrequently: true }) }
+    }
+    const camBuf = mk()
+    const vidBuf = mk()
+
+    const meanRGB = ({ c, x }) => {
+      const d = x.getImageData(0, 0, c.width, c.height).data
+      let r = 0, g = 0, b = 0
+      for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2] }
+      const n = d.length / 4
+      return [r / n, g / n, b / n]
+    }
+
+    // MindAR stores its camera element on the system and appends it at z-index -2.
+    // Fall back to any <video> that isn't ours, in case that internal name changes.
+    const camVideo = () => {
+      const sys = scene.systems && scene.systems['mindar-image-system']
+      if (sys && sys.video) return sys.video
+      return [...document.querySelectorAll('video')].find(v => v !== video) || null
+    }
+
+    // Where the anchor's centre lands in the camera frame's own pixel space.
+    // Going via getBoundingClientRect() means MindAR's cover-fit sizing and
+    // negative offsets are accounted for without reproducing that maths.
+    const targetInCamPixels = cv => {
+      const rect = cv.getBoundingClientRect()
+      if (!rect.width || !rect.height) return null
+      const p = new THREE.Vector3()
+      front.object3D.getWorldPosition(p)
+      p.project(scene.camera)
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return null
+      const sx = (p.x * 0.5 + 0.5) * window.innerWidth
+      const sy = (-p.y * 0.5 + 0.5) * window.innerHeight
+      const u = (sx - rect.left) / rect.width
+      const v = (sy - rect.top) / rect.height
+      if (u < 0 || u > 1 || v < 0 || v > 1) return null      // off-screen
+      return { u, v }
+    }
+
+    return () => {
+      const cv = camVideo()
+      if (!cv || !cv.videoWidth || video.readyState < 2) return null
+
+      const at = targetInCamPixels(cv) || { u: 0.5, v: 0.5 }
+      // Window scaled to the panel, clamped so it can't run off the frame.
+      const sw = Math.max(8, cv.videoWidth * 0.18 * MATCH.sampleFrac)
+      const sh = sw
+      const sx = Math.min(cv.videoWidth - sw, Math.max(0, at.u * cv.videoWidth - sw / 2))
+      const sy = Math.min(cv.videoHeight - sh, Math.max(0, at.v * cv.videoHeight - sh / 2))
+
+      try {
+        camBuf.x.drawImage(cv, sx, sy, sw, sh, 0, 0, 24, 24)
+        // Matching region of the clip: the centre of the cropped rectangle.
+        const cwPx = crop.w * video.videoWidth
+        const chPx = crop.h * video.videoHeight
+        const vw2 = cwPx * MATCH.sampleFrac
+        const vh2 = chPx * MATCH.sampleFrac
+        vidBuf.x.drawImage(
+          video,
+          crop.x * video.videoWidth + (cwPx - vw2) / 2,
+          crop.y * video.videoHeight + (chPx - vh2) / 2,
+          vw2, vh2, 0, 0, 24, 24)
+      } catch {
+        return null            // decode not ready, or a tainted frame
+      }
+      return { cam: meanRGB(camBuf), vid: meanRGB(vidBuf) }
+    }
+  })()
+
+  // Exposed so it can be exercised without a camera; see the verification notes.
+  function gainFrom (cam, vid) {
+    const lum = c => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    const lv = lum(vid)
+    if (lv < 4) return null                    // clip too dark to divide by
+    const lRatio = lum(cam) / lv
+    return [0, 1, 2].map(i => {
+      const perCh = vid[i] > 4 ? cam[i] / vid[i] : lRatio
+      const mixed = lRatio + (perCh - lRatio) * MATCH.color
+      return Math.min(MATCH.max, Math.max(MATCH.min, mixed))
+    })
+  }
+  window.__gainFrom = gainFrom
+
+  let matchTimer = null
+  const startMatching = () => {
+    if (!matchOn || matchTimer) return
+    matchTimer = setInterval(() => {
+      const s = sampler()
+      if (!s) return
+      const g = gainFrom(s.cam, s.vid)
+      if (!g) return
+      const k = MATCH.smoothing
+      for (let i = 0; i < 3; i++) gain[i] += (g[i] - gain[i]) * k
+      pushGain()
+      if (onGain) onGain()
+    }, MATCH.intervalMs)
+  }
+  const stopMatching = () => {
+    if (matchTimer) { clearInterval(matchTimer); matchTimer = null }
+  }
+  let onGain = null
+
   let locked = false
   anchor.addEventListener('targetFound', () => {
     locked = true
     $('scan').hidden = true
     video.play().catch(e => console.warn('play blocked:', e.message))
+    startMatching()
   })
   anchor.addEventListener('targetLost', () => {
     locked = false
@@ -364,6 +569,9 @@ function buildScene (w, dir, video) {
     // Pause rather than stop, so turning the bottle away and back resumes the
     // line instead of losing it.
     video.pause()
+    // Hold the last gain: sampling with no target would read whatever the camera
+    // happens to be pointed at and yank the exposure before the next lock.
+    stopMatching()
   })
 
   scene.addEventListener('arReady', () => { if (!locked) $('scan').hidden = false })
@@ -371,10 +579,10 @@ function buildScene (w, dir, video) {
     fatal('Camera unavailable. Check that the browser has camera permission and that no other app is using it.')
   })
 
-  // Never leave audio running in a backgrounded tab.
+  // Never leave audio running — or keep sampling — in a backgrounded tab.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) video.pause()
-    else if (locked) video.play().catch(() => {})
+    if (document.hidden) { video.pause(); stopMatching() }
+    else if (locked) { video.play().catch(() => {}); startMatching() }
   })
 
   if (q.get('tune')) buildTuner()
@@ -383,16 +591,21 @@ function buildScene (w, dir, video) {
 
   function buildTuner () {
     const rows = [
-      ['vx',      'x',       () => place.x,  v => place.x = v,  0.01],
-      ['vy',      'y',       () => place.y,  v => place.y = v,  0.01],
-      ['vw',      'width',   () => place.w,  v => place.w = v,  0.01],
-      ['cx',      'crop x',  () => crop.x,   v => crop.x = v,   0.005],
-      ['cw',      'crop w',  () => crop.w,   v => crop.w = v,   0.005],
-      ['feather', 'feather', () => feather,  v => feather = v,  0.005],
-      ['curve',   'curve°',  () => curve,    v => curve = v,    2],
+      ['x',        () => place.x,        v => place.x = v,        0.01],
+      ['y',        () => place.y,        v => place.y = v,        0.01],
+      ['width',    () => place.w,        v => place.w = v,        0.01],
+      ['crop x',   () => crop.x,         v => crop.x = v,         0.005],
+      ['crop w',   () => crop.w,         v => crop.w = v,         0.005],
+      // Left and right are ganged: asymmetric side fades are almost never wanted,
+      // and panel space on a phone is scarce. ?fl= / ?fr= still split them.
+      ['fade top', () => feather.top,    v => feather.top = v,    0.005],
+      ['fade side', () => feather.left,
+        v => { feather.left = v; feather.right = v },              0.005],
+      ['fade btm', () => feather.bottom, v => feather.bottom = v, 0.005],
+      ['curve°',   () => curve,          v => curve = v,          2],
     ]
     const host = $('tune-rows')
-    rows.forEach(([key, label, get, set, step]) => {
+    rows.forEach(([label, get, set, step]) => {
       const row = document.createElement('div')
       row.className = 'tune-row'
       row.innerHTML = `<label></label><button type="button">−</button>
@@ -408,18 +621,41 @@ function buildScene (w, dir, video) {
       host.appendChild(row)
     })
 
+    // Live gain readout. Without this there is no way to tell whether the matcher
+    // is working, stuck, or pinned against a clamp.
+    if (!preview) {
+      const row = document.createElement('div')
+      row.className = 'tune-row'
+      row.innerHTML = '<label>gain</label><output class="wide"></output>'
+      const out = row.querySelector('output')
+      const draw = () => {
+        out.textContent = matchOn
+          ? gain.map(v => v.toFixed(2)).join(' ')
+          : gain.map(v => v.toFixed(2)).join(' ') + ' (off)'
+      }
+      draw()
+      onGain = draw
+      host.appendChild(row)
+    }
+
     $('tune').hidden = false
     $('tune').addEventListener('click', e => {
       const act = e.target.dataset.act
       if (act === 'hide') $('tune').hidden = true
       if (act === 'copy') {
+        const r = n => +n.toFixed(4)
+        const sym = feather.left === feather.right
+        const fStr = sym
+          ? `{ top: ${r(feather.top)}, side: ${r(feather.left)}, bottom: ${r(feather.bottom)} }`
+          : `{ top: ${r(feather.top)}, right: ${r(feather.right)}, ` +
+            `bottom: ${r(feather.bottom)}, left: ${r(feather.left)} }`
         const snippet =
-`    curve: ${curve},
+`    curve: ${r(curve)},
     video: {
       file: '${w.video.file}',
-      crop: { x: ${crop.x}, y: ${crop.y}, w: ${crop.w}, h: ${crop.h} },
-      place: { x: ${place.x}, y: ${place.y}, w: ${place.w} },
-      feather: ${feather},
+      crop: { x: ${r(crop.x)}, y: ${r(crop.y)}, w: ${r(crop.w)}, h: ${r(crop.h)} },
+      place: { x: ${r(place.x)}, y: ${r(place.y)}, w: ${r(place.w)} },
+      feather: ${fStr},
     },`
         const out = $('tune-out')
         out.textContent = snippet

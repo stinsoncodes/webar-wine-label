@@ -14,7 +14,16 @@ export const WINES = {
     // Pixel dimensions of the image that was compiled into targets.mind.
     // MindAR normalises a target to 1 unit wide, so this is what sets the
     // label plane's aspect. Getting it wrong stretches everything.
-    target: { w: 484, h: 1200 },
+    //
+    // chordMm is how wide that same region reads straight across the front of the
+    // bottle — a ruler laid flat, not a tape following the curve. Together with
+    // bottle.diameterMm it derives `curve` exactly, so no one has to re-guess it.
+    // Here: the target covers 83.8% of a label that reaches the bottle's
+    // silhouette, so 0.838 x 76mm.
+    target: { w: 484, h: 1200, chordMm: 63.6 },
+
+    // Standard 750ml Bordeaux.
+    bottle: { diameterMm: 76 },
 
     video: {
       file: 'avatar.mp4',
@@ -38,17 +47,26 @@ export const WINES = {
       // Tune live with ?tune=1 rather than by editing and redeploying.
       place: { x: 0, y: -0.566, w: 1.0 },
 
-      // Fade the outer edge of the video plane to transparent, in label-width
-      // units. Softens the boundary against the static label underneath so a
-      // small misalignment doesn't read as a hard rectangle. 0 disables.
-      feather: 0.03,
+      // Edge fade widths, in label-width units. Accepts a scalar, {top, side,
+      // bottom}, or {top, right, bottom, left}. 0 on an edge disables it.
+      //
+      // The edges are not equivalent. The top lands on the printed torn-paper
+      // edge, which is already an irregular high-contrast boundary — fading it
+      // hard only blurs a join that reads fine crisp. The sides and bottom cut
+      // across flat dark tone with nothing to hide behind, so they need to
+      // dissolve. Hence three different numbers rather than one.
+      feather: { top: 0.01, side: 0.05, bottom: 0.09 },
     },
 
-    // Half-arc angle the panel wraps, in degrees. 0 is flat. A wine label is
-    // wrapped around a cylinder, and a flat panel reads as a card taped to the
-    // bottle — most visible at the left and right edges as you turn it.
-    // Tune with ?curve=NN; a 750ml Bordeaux bottle lands somewhere around 45-60.
-    curve: 0,
+    // Live exposure and white-balance match against the camera feed, so the clip's
+    // baked-in lighting follows the room instead of fighting it. Omit to accept
+    // these defaults; ?match=0 disables, ?gain=N pins a fixed value.
+    // match: { color: 0.6, min: 0.55, max: 1.8, smoothing: 0.12 },
+
+    // Half-arc angle the panel wraps, in degrees; 0 is flat. Omitted here because
+    // target.chordMm and bottle.diameterMm derive it (~57° for this bottle).
+    // Set explicitly, or pass ?curve=NN, to override.
+    // curve: 57,
 
     // Static label image drawn behind the video, covering the whole target.
     // OFF (null) by default. It was on initially to control the seam, but the

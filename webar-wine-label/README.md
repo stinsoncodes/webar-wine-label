@@ -82,7 +82,12 @@ straight to a value: `&vy=-0.566&cw=0.4585`.
 |---|---|
 | `vx` `vy` `vw` | Video plane position and width, in label-width units, origin at label centre |
 | `cx` `cy` `cw` `ch` | Crop rectangle within the video frame, 0..1 |
-| `feather` | Edge fade width, label-width units. Softens the boundary against the static label |
+| `ft` `fr` `fb` `fl` | Edge fade widths — top, right, bottom, left — in label-width units |
+| `feather` | Sets all four at once |
+| `curve` | Half-arc wrap in degrees; overrides the value derived from bottle geometry |
+| `match` | `0` disables live exposure matching |
+| `gain` | Pins a fixed gain and disables matching, e.g. `gain=1.25` |
+| `mcolor` `mmin` `mmax` `msmoothing` | Matcher tuning |
 | `filterMinCF` `filterBeta` `missTolerance` `warmupTolerance` | Tracker tuning |
 
 The video plane's **height is always derived** from the cropped aspect, so the picture
@@ -122,6 +127,34 @@ a user gesture. The tap gate calls `play()` then `pause()` inside the tap to mar
 element user-activated, so playback on `targetFound` is allowed to carry sound. The
 scene isn't attached until that tap either, which puts the camera prompt behind a
 deliberate action rather than a page load.
+
+**Per-edge fading, not one number.** The four edges of the video panel are not
+equivalent. The top lands on the printed torn-paper edge — already an irregular,
+high-contrast boundary, so fading it hard only blurs a join that reads fine crisp. The
+sides and bottom cut across flat dark tone with nothing to hide behind and need to
+dissolve. Hence `feather: { top, side, bottom }` rather than a single value.
+
+**Exposure matching.** The clip carries whatever lighting it was rendered under; the
+physical label sits under the user's. That mismatch at the boundary is the loudest
+"this is a sticker" signal, louder than geometry. Every ~120 ms while locked, the app
+samples the camera feed where the target is and the clip's cropped centre, and drives a
+per-channel `gain` uniform toward the ratio, eased with an EMA.
+
+Comparing the two directly is only valid because the video content *is* the label
+content — the same portrait, so it is like-for-like. If a future clip diverges
+substantially from what it covers, this assumption breaks and the gain will be wrong;
+disable it with `match: { enabled: false }` on that wine.
+
+The gain multiplies in gamma space rather than linear, so it approximates an exposure
+change rather than reproducing one. Within the clamped range the difference is not
+visible, and linearising both textures to fix it would buy nothing.
+
+**Curve comes from measurements, not taste.** `target.chordMm` (how wide the compiled
+region reads straight across the bottle front — a ruler laid flat, not a tape following
+the curve) and `bottle.diameterMm` derive the half-arc angle exactly:
+`asin((chord/2)/(diameter/2))`. Storing those two inputs rather than the resulting
+angle means a new bottle shape is a data change, and nobody has to re-guess later.
+A standard 750 ml Bordeaux is 76 mm.
 
 **Never give `body` a background.** MindAR inserts its camera feed as a `<video>` at
 `z-index: -2`. A background on the *root* element paints into the viewport canvas

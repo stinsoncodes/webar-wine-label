@@ -141,9 +141,12 @@ p.hint { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
   font: 12px/1.35 ui-monospace, Menlo, monospace;
   backdrop-filter: blur(8px);
 }
+/* Enough rows now that a short phone in landscape can't show them all. */
+#tune-rows { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .tune-row { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
 .tune-row label { width: 74px; color: var(--dim); }
 .tune-row output { width: 62px; text-align: right; font-variant-numeric: tabular-nums; }
+.tune-row output.wide { width: auto; flex: 1; }
 .tune-row button, .tune-actions button {
   font: inherit; color: var(--fg); background: #26262e;
   border: 1px solid #3a3a44; border-radius: 6px; padding: 5px 10px; min-width: 34px;
