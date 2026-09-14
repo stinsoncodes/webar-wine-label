@@ -9,8 +9,8 @@ available here, so this crops just that strip from each master, rotates it
 upright, and stacks all 13 with their expected id alongside. One look confirms
 every label carries the right name.
 
-This exists because nine of the thirteen labels initially read "Scot Fluharty" —
-slides 6-13 were duplicated from slide 5 and the name field was never updated.
+This exists because nine of the thirteen labels initially carried a duplicated
+name: slides 6-13 were copied from slide 5 and the name field was never updated.
 That text falls inside the HeyGen crop, so a stale name would be baked into a
 generated video and contradict the printed label. Re-run this after any re-export.
 """

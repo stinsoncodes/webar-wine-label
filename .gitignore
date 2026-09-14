@@ -12,3 +12,7 @@ node_modules/
 # PowerPoint slide exports — a reproducible intermediate, ~40MB.
 # The print masters in source/labels/ supersede these.
 19_Crimes_Quanta Edition_Front Label/
+
+# Source artwork. Large (~100MB each) and carries full names and employer
+# branding. The print masters in source/labels/ are the committed record.
+*.pptx

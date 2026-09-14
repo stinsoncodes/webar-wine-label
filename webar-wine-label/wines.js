@@ -6,7 +6,7 @@
 // A QR code encodes only ?wine=<label>. The cast selector adds ?as=<character>.
 // That split is what lets you hold Jacqui's bottle and watch Loren talk.
 //
-// It works because the Quanta label template is pixel-identical across all 13 —
+// It works because the label template is pixel-identical across all 13 —
 // torn edge, crest, wordmark and copy at the same coordinates on every slide, with
 // only the portrait differing. So one geometry serves every label, and a
 // character's `crop`/`place` are valid on any bottle. Had the template shifted per
@@ -14,9 +14,12 @@
 // passes instead of 13.
 //
 // Ids are baked into printed QR codes. Never change one.
+//
+// Keep this file free of surnames and of any employer or organisation name: it is
+// served verbatim to anyone who opens the site. First names only.
 
 // ---------------------------------------------------------------------------
-// Shared geometry for the 13 Quanta labels
+// Shared geometry for the 13 personalised labels
 // ---------------------------------------------------------------------------
 
 // target: pixel size of the image compiled into targets.mind. MindAR normalises a
@@ -27,8 +30,8 @@
 //   `curve` exactly — see tools/warp-targets.py, which prints both.
 //   3.5in of label is an 88.9mm arc wrapping 134deg of a 76mm bottle: a 69.97mm
 //   chord, of which the target keeps the central 83.8% = 58.6mm -> curve 50.5deg.
-const QUANTA_LABEL = {
-  variant: 'Quanta Edition',
+const SHARED_LABEL = {
+  variant: 'Special Edition',
   target: { w: 500, h: 1246, chordMm: 58.6 },
   bottle: { diameterMm: 76 },
 
@@ -48,25 +51,25 @@ export const LABELS = {
     variant: 'Cabernet Sauvignon',
     // Compiled from a photograph of the curved bottle, so the cylindrical
     // projection is already baked in. chordMm corrected from 63.6 — see the note
-    // in QUANTA_LABEL; the original assumed the label reached the silhouette.
+    // in SHARED_LABEL; the original assumed the label reached the silhouette.
     target: { w: 484, h: 1200, chordMm: 58.6 },
     bottle: { diameterMm: 76 },
     feather: { top: 0.01, side: 0.05, bottom: 0.09 },
   },
 
-  jacqui:   { name: 'Jacqui Weigman',  ...QUANTA_LABEL },
-  james:    { name: 'James Stinson',   ...QUANTA_LABEL },
-  seth:     { name: 'Seth Gunsauls',   ...QUANTA_LABEL },
-  kyle:     { name: 'Kyle Gunsauls',   ...QUANTA_LABEL },
-  scot:     { name: 'Scot Fluharty',   ...QUANTA_LABEL },
-  julie:    { name: 'Julie Williams',  ...QUANTA_LABEL },
-  bo:       { name: 'Bo Cassidy',      ...QUANTA_LABEL },
-  dan:      { name: 'Dan Lazic',       ...QUANTA_LABEL },
-  jayshree: { name: 'Jayshree Desai',  ...QUANTA_LABEL },
-  jeff:     { name: 'Jeff Esplin',     ...QUANTA_LABEL },
-  karl:     { name: 'Karl Studer',     ...QUANTA_LABEL },
-  duke:     { name: 'Duke Austin',     ...QUANTA_LABEL },
-  loren:    { name: 'Loren Chandler',  ...QUANTA_LABEL },
+  jacqui:   { name: 'Jacqui',   ...SHARED_LABEL },
+  james:    { name: 'James',    ...SHARED_LABEL },
+  seth:     { name: 'Seth',     ...SHARED_LABEL },
+  kyle:     { name: 'Kyle',     ...SHARED_LABEL },
+  scot:     { name: 'Scot',     ...SHARED_LABEL },
+  julie:    { name: 'Julie',    ...SHARED_LABEL },
+  bo:       { name: 'Bo',       ...SHARED_LABEL },
+  dan:      { name: 'Dan',      ...SHARED_LABEL },
+  jayshree: { name: 'Jayshree', ...SHARED_LABEL },
+  jeff:     { name: 'Jeff',     ...SHARED_LABEL },
+  karl:     { name: 'Karl',     ...SHARED_LABEL },
+  duke:     { name: 'Duke',     ...SHARED_LABEL },
+  loren:    { name: 'Loren',    ...SHARED_LABEL },
 
 }
 

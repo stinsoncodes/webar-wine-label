@@ -1,0 +1,61 @@
+# This is a private gift, not a public site. Nothing here should be indexed,
+# cached, summarised or used as training data.
+#
+# NOTE this file is a REQUEST, not a control. Compliant crawlers honour it;
+# nothing stops one that doesn't. The real protection is that the URLs are
+# unlisted and unlinked — a QR code on a bottle creates no inbound link for a
+# crawler to follow. vercel.json also sets X-Robots-Tag on every response, which
+# is stronger: robots.txt stops crawling, X-Robots-Tag stops indexing even of a
+# URL discovered some other way.
+
+User-agent: *
+Disallow: /
+
+# Named explicitly as well. A blanket rule above should cover these, but some
+# fetchers only look for their own token, and being explicit makes the intent
+# unambiguous if anyone ever audits this.
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: OAI-SearchBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: meta-externalagent
+Disallow: /
+
+User-agent: Diffbot
+Disallow: /
+
+User-agent: omgili
+Disallow: /

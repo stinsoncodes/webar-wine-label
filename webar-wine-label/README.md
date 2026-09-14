@@ -29,7 +29,7 @@ survives the switch.
 have to match across characters — each clip just has to say where it sits on the label.
 That is what makes any character valid on any bottle.
 
-**This only works because the Quanta label template is pixel-identical across all 13
+**This only works because the label template is pixel-identical across all 13
 slides** — torn edge, crest, wordmark and copy at the same coordinates, with only the
 portrait differing (verified from the PPTX shape geometry). If a future template shifts
 per person, every label x character pair needs its own alignment: 169 passes, not 13.
@@ -39,7 +39,7 @@ bottle it is looking at. That is why each label gets its own single-target `.min
 rather than all of them compiled into one: detection stays fast, the download stays
 ~700 KB instead of ~9 MB, and a new label cannot regress the existing ones.
 
-**Never consolidate the Quanta targets into one multi-target file.** Their cream upper
+**Never consolidate the personalised targets into one multi-target file.** Their cream upper
 half is byte-identical, so roughly half of every target's features are shared with the
 other twelve. Harmless as separate files, since only one is ever loaded — but combined,
 they would cross-match constantly.
@@ -58,7 +58,7 @@ assets/characters/<char-id>/<file>.mp4   the talking clip
 
 ## Adding a label
 
-For a label that exists as PowerPoint artwork (the Quanta set):
+For a label that exists as PowerPoint artwork (the personalised set):
 
 1. **Export the slides** from PowerPoint: File > Export > PNG, *Save Every Slide*,
    width 1500. AppleScript cannot do this — its PNG export is a no-op and the app is
@@ -95,8 +95,8 @@ For a label that exists as PowerPoint artwork (the Quanta set):
    assets/characters/<id>/<file>.mp4
    ```
 
-5. **Add entries to `wines.js`** — one in `LABELS`, one in `CHARACTERS`. The Quanta
-   labels share `QUANTA_LABEL`, so a new one is a single spread. The values you must
+5. **Add entries to `wines.js`** — one in `LABELS`, one in `CHARACTERS`. The personalised
+   labels share `SHARED_LABEL`, so a new one is a single spread. The values you must
    get right by hand are `target: { w, h }` (pixel size of the compiled image — a
    wrong ratio stretches everything) and `target.chordMm` (how wide that region reads
    straight across the bottle; `warp-targets.py` prints it).
