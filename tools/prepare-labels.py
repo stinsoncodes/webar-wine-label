@@ -13,11 +13,19 @@ Two outputs per person:
                            must be this file, or the printed label will not match
                            the compiled AR tracking target.
 
-  source/heygen/<id>.png   1500x<window> — exactly the region of the printed
+  source/heygen/window/<id>.png   1500x1227 — exactly the region of the printed
                            label that the photo occupies, so a generated clip is
-                           framed the same way the label is. Identical crop for
-                           all 13, which is what lets any character's video play
-                           on any bottle.
+                           framed the way the label is and its background matches
+                           the print at the seam.
+
+  source/heygen/face/<id>.png     1020x1227 — the same pixels cropped tighter, for
+                           generators that need the subject larger in frame. Also
+                           excludes the vertical name text, so nobody's name can
+                           be warped by a generative model.
+
+Which variant to use is an open question: generators warn that avatars fail when
+the subject is small, but the window crop is already a chest-up framing. Generate
+one person both ways and compare before committing to thirteen.
 
 The window's top edge is placed just ABOVE the highest point of the torn-paper
 edge, so the clip contains its own copy of that edge. That is deliberate: the
@@ -47,6 +55,18 @@ LABEL_W_IN, LABEL_H_IN = 3.5, 5.75
 TORN_TOP_FRAC = 0.505213
 CHECK_CREAM_MIN = 170      # luminance well above the tear should be paper
 CHECK_PHOTO_MAX = 150      # luminance well below it should be photograph
+
+# Tighter crop of the photo window, as fractions of window width, for generators
+# that want the subject larger in frame. One fixed box serves all 13: the designer
+# placed every portrait so the face sits essentially dead centre of the window
+# (verified on a 13-up contact sheet with centre crosshairs), so no per-person
+# face detection is needed — and none is available here anyway.
+#
+# The right edge stops short deliberately: the vertical REG. NO. / name text lives
+# beyond it, and excluding it means a generator cannot warp or garble somebody's
+# name. Full height is kept so the shoulders stay in frame, which is the framing
+# these tools ask for.
+FACE_CROP_X0, FACE_CROP_X1 = 0.133, 0.813
 
 # slide number -> (id, display name), in the order the names were given.
 PEOPLE = [
@@ -78,9 +98,10 @@ def check_torn_edge(gray, torn_row, label):
 
 def main(src_dir):
     lab_dir = os.path.join(HERE, 'source', 'labels')
-    hey_dir = os.path.join(HERE, 'source', 'heygen')
-    os.makedirs(lab_dir, exist_ok=True)
-    os.makedirs(hey_dir, exist_ok=True)
+    win_dir = os.path.join(HERE, 'source', 'heygen', 'window')
+    fac_dir = os.path.join(HERE, 'source', 'heygen', 'face')
+    for d in (lab_dir, win_dir, fac_dir):
+        os.makedirs(d, exist_ok=True)
 
     # One window for all 13. The label template is identical across slides, so a
     # shared window keeps every HeyGen input the same size and framing — the
@@ -116,7 +137,11 @@ def main(src_dir):
     print(f'  window top {top/need*LABEL_H_IN:.3f} in from label top '
           f'({top/need*100:.1f}%)\n')
 
-    print(f"{'id':<9} {'name':<9} {'print master':>16} {'heygen':>14}  check")
+    fx0, fx1 = int(round(FACE_CROP_X0 * W)), int(round(FACE_CROP_X1 * W))
+    print(f'face crop    {fx1-fx0}x{win_h}  aspect {(fx1-fx0)/win_h:.4f}'
+          f'  (x {fx0}..{fx1}, excludes the name text)')
+    print()
+    print(f"{'id':<9} {'print master':>16} {'window':>13} {'face':>13}  check")
     print('-' * 62)
     bad = 0
     for n, pid, name in PEOPLE:
@@ -127,14 +152,16 @@ def main(src_dir):
         bad += 0 if ok else 1
         label.save(os.path.join(lab_dir, f'{pid}.png'))
         window = label.crop((0, top, W, need))
-        window.save(os.path.join(hey_dir, f'{pid}.png'))
-        print(f'{pid:<9} {name:<9} {str(label.size):>16} {str(window.size):>14}'
-              f'  {"ok" if ok else "FAIL"}')
+        window.save(os.path.join(win_dir, f'{pid}.png'))
+        window.crop((fx0, 0, fx1, win_h)).save(os.path.join(fac_dir, f'{pid}.png'))
+        print(f'{pid:<9} {str(label.size):>16} {str(window.size):>13} '
+              f'{str((fx1-fx0, win_h)):>13}  {"ok" if ok else "FAIL"}')
     if bad:
         print(f'\n!! {bad} label(s) failed the torn-edge check — review before printing')
 
-    print(f'\nprint masters -> source/labels/   ({len(PEOPLE)} files)')
-    print(f'heygen inputs -> source/heygen/   ({len(PEOPLE)} files)')
+    print(f'\nprint masters -> source/labels/          ({len(PEOPLE)} files)')
+    print(f'generator in  -> source/heygen/window/  ({len(PEOPLE)} files)')
+    print(f'              -> source/heygen/face/    ({len(PEOPLE)} files)')
 
 
 if __name__ == '__main__':
