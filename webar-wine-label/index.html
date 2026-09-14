@@ -14,7 +14,7 @@
 <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-<!-- Wine picker: shown when no ?wine= is given, or the id isn't in the manifest. -->
+<!-- Label picker: shown when no ?wine= is given, or the id isn't in the manifest. -->
 <div id="picker" hidden>
   <h1>Talking Wine Label</h1>
   <p class="sub">Scan the code on a bottle, or choose one.</p>
@@ -36,6 +36,18 @@
 <div id="scan" hidden>
   <div class="reticle"><span></span><span></span><span></span><span></span></div>
   <p>Align the label within the frame</p>
+</div>
+
+<!-- Cast selector. ?wine= fixes which label is tracked; this only changes whose
+     clip plays on it, so the lock is never dropped. -->
+<button id="cast-btn" type="button" hidden></button>
+<div id="cast" hidden>
+  <div class="cast-head">
+    <b>Who's talking?</b>
+    <button id="cast-close" type="button">Done</button>
+  </div>
+  <p class="cast-note">Plays any character on the bottle in your hand.</p>
+  <div id="cast-list"></div>
 </div>
 
 <div id="fatal" hidden><div><h2>Can't start</h2><p id="fatal-msg"></p></div></div>

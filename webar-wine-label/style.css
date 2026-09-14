@@ -156,3 +156,62 @@ p.hint { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
 .tune-actions button { flex: 1; padding: 8px; }
 #tune-out { margin: 8px 0 0; padding: 8px; background: #17171c; border-radius: 7px;
             max-height: 34vh; overflow: auto; white-space: pre; font-size: 11px; }
+
+/* ---------- cast selector ---------- */
+/* Changes only which character plays. The tracking target is fixed by ?wine=, so
+   switching never drops the lock — hence a lightweight overlay rather than a
+   navigation. */
+
+#cast-btn {
+  position: fixed;
+  z-index: 12;
+  top: calc(10px + env(safe-area-inset-top));
+  right: 10px;
+  font: 600 13px/1 inherit;
+  color: var(--fg);
+  background: rgba(10, 10, 12, .74);
+  border: 1px solid #3a3a44;
+  border-radius: 999px;
+  padding: 10px 15px;
+  max-width: 46vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+#cast-btn:active { background: rgba(40, 40, 48, .9); }
+
+#cast {
+  position: fixed;
+  z-index: 25;
+  left: 0; right: 0; bottom: 0;
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(13, 13, 15, .97);
+  border-top: 1px solid #33333b;
+  border-radius: 14px 14px 0 0;
+  padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+  backdrop-filter: blur(10px);
+}
+.cast-head { display: flex; align-items: center; justify-content: space-between; }
+.cast-head b { font-size: 16px; }
+.cast-head button {
+  font: inherit; color: var(--fg); background: #26262e;
+  border: 1px solid #3a3a44; border-radius: 8px; padding: 7px 14px;
+}
+.cast-note { margin: 4px 0 12px; color: var(--dim); font-size: 13px; }
+
+#cast-list { overflow-y: auto; -webkit-overflow-scrolling: touch;
+             display: flex; flex-direction: column; gap: 7px; }
+.cast-item {
+  display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+  background: #1b1b1f; border: 1px solid #2e2e35; border-radius: 10px;
+  padding: 11px 14px;
+}
+.cast-item:active:not(:disabled) { background: #24242b; }
+.cast-item b { display: block; font-size: 15.5px; }
+.cast-item span { font-size: 12.5px; color: var(--dim); }
+.cast-item.on { border-color: var(--accent); background: #241a1b; }
+.cast-item.on b::after { content: ' ·  now playing'; color: var(--accent); font-weight: 400; font-size: 12.5px; }
+.cast-item:disabled { opacity: .42; }
