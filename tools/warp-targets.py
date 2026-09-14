@@ -32,6 +32,12 @@ BOTTLE_DIAMETER_MM = 76.0      # standard 750ml Bordeaux
 LABEL_ARC_IN = 3.5             # label width, measured along the curve
 KEEP = 0.838                   # fraction of projected width retained
 
+# Width of the compiled target. The proven target — the one tracking at 99.6% —
+# is 484px wide, so there is no evidence more resolution helps, and plenty of
+# reason not to: compile time and .mind size both scale with pixel count, and a
+# full 989px target would be a ~2.8MB download per bottle instead of ~700KB.
+OUT_WIDTH = 500
+
 IDS = ['jacqui', 'james', 'seth', 'kyle', 'scot', 'julie', 'bo',
        'dan', 'jayshree', 'jeff', 'karl', 'duke', 'loren']
 
@@ -134,7 +140,9 @@ def main():
     os.makedirs(dst, exist_ok=True)
     first = Image.open(os.path.join(src, f'{IDS[0]}.png'))
     g = geometry(first.width)
-    print(f'source {first.width}x{first.height} -> target {g["out_w"]}x{first.height}'
+    scaled_h = round(first.height * OUT_WIDTH / g['out_w']) if OUT_WIDTH else first.height
+    print(f'source {first.width}x{first.height} -> warped {g["out_w"]}x{first.height}'
+          f' -> compiled {OUT_WIDTH}x{scaled_h}'
           f'  aspect {g["out_w"]/first.height:.4f}')
     print(f'manifest: chordMm {g["kept_chord_mm"]:.1f}  '
           f'derived curve {g["curve_deg"]:.2f} deg\n')
@@ -143,8 +151,12 @@ def main():
         if not os.path.exists(p):
             sys.exit(f'missing {p} — run tools/prepare-labels.py first')
         im = Image.open(p).convert('RGB')
-        warp(im, geometry(im.width)).save(os.path.join(dst, f'{pid}.png'))
-        print(f'  {pid}')
+        out = warp(im, geometry(im.width))
+        if OUT_WIDTH and out.width != OUT_WIDTH:
+            out = out.resize((OUT_WIDTH, round(out.height * OUT_WIDTH / out.width)),
+                             Image.LANCZOS)
+        out.save(os.path.join(dst, f'{pid}.png'))
+        print(f'  {pid:<9} {out.width}x{out.height}')
     print(f'\n{len(IDS)} targets -> source/targets/')
 
 

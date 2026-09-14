@@ -7,60 +7,108 @@ Deployed from this directory (Vercel Root Directory = `webar-wine-label`).
 
 ---
 
-## How a wine is selected
+## Labels and characters are separate things
 
-Each bottle's QR code encodes its own URL:
+Two tables in `wines.js`:
+
+| | |
+|---|---|
+| `LABELS` | what can be **tracked** — one per physical label design |
+| `CHARACTERS` | what can be **played** — one per person |
 
 ```
-https://<app>/?wine=19-crimes-cabernet
+?wine=jacqui             her bottle, her character   <- what a QR code encodes
+?wine=jacqui&as=loren    her bottle, Loren talking   <- what the cast selector does
 ```
 
-The QR already identifies the wine, so the app never has to work it out by sight.
-That's why each label gets its own single-target `.mind` file rather than all twelve
-being compiled into one: detection stays fast, the download stays small (one combined
-file would be ~8 MB), and adding label #13 cannot regress the other twelve.
+`wine` picks the tracking target; `as` picks the clip, defaulting to the label's own
+person. The selector only ever rewrites `as`, so the target is untouched and the lock
+survives the switch.
 
-With no `?wine=`, or an unknown id, the app shows a picker listing everything in
-`wines.js`.
+`crop` and `place` belong to the **video**, expressed in label coordinates. They do not
+have to match across characters — each clip just has to say where it sits on the label.
+That is what makes any character valid on any bottle.
+
+**This only works because the Quanta label template is pixel-identical across all 13
+slides** — torn edge, crest, wordmark and copy at the same coordinates, with only the
+portrait differing (verified from the PPTX shape geometry). If a future template shifts
+per person, every label x character pair needs its own alignment: 169 passes, not 13.
+
+The QR already identifies the label, so the app never has to work out by sight which
+bottle it is looking at. That is why each label gets its own single-target `.mind`
+rather than all of them compiled into one: detection stays fast, the download stays
+~700 KB instead of ~9 MB, and a new label cannot regress the existing ones.
+
+**Never consolidate the Quanta targets into one multi-target file.** Their cream upper
+half is byte-identical, so roughly half of every target's features are shared with the
+other twelve. Harmless as separate files, since only one is ever loaded — but combined,
+they would cross-match constantly.
+
+With no `?wine=`, or an unknown id, the app shows a picker listing every label.
+
+## Asset layout
+
+```
+assets/labels/<label-id>/targets.mind    compiled tracking target
+assets/labels/<label-id>/label.jpg       optional, only if LABELS[id].still is set
+assets/characters/<char-id>/<file>.mp4   the talking clip
+```
 
 ---
 
-## Adding a wine
+## Adding a label
 
-1. **Photograph the label** on the bottle, straight on, diffuse light, no flash.
-   Crop tight to the label — background in the target gets learned as part of it and
-   then isn't there at runtime.
+For a label that exists as PowerPoint artwork (the Quanta set):
 
-2. **Compile the target.** From the repo root:
+1. **Export the slides** from PowerPoint: File > Export > PNG, *Save Every Slide*,
+   width 1500. AppleScript cannot do this — its PNG export is a no-op and the app is
+   sandboxed out of temp directories. PDF export works but nothing on macOS ships a
+   PDF rasteriser.
+
+2. **Build masters and HeyGen inputs**, from the repo root:
 
    ```bash
-   python3 tools/compile-server.py
+   python3 tools/prepare-labels.py "<folder of SlideN.png>"
+   python3 tools/verify-names.py                 # then LOOK at names.png
    ```
 
-   Open `http://localhost:8765/tools/compile.html`, point `SOURCES` at your crop.
-   It prints feature counts and draws the keypoint overlay. Want **>1500 matching
-   points** and keypoints spread across the whole label; sparse or corner-clustered
-   means it will track badly and no runtime tuning fixes that.
+   `verify-names.py` tiles the per-person name strip from all 13 into one sheet.
+   Do not skip it: nine labels once carried a duplicated name, and that text falls
+   inside the HeyGen crop, so it would have been baked into nine paid videos.
 
-3. **Drop three files** into `assets/<id>/`:
+3. **Pre-warp and compile the targets:**
+
+   ```bash
+   python3 tools/warp-targets.py --test          # verify the projection
+   python3 tools/warp-targets.py                 # -> source/targets/
+   python3 tools/compile-server.py <workspace>   # then open compile.html
+   ```
+
+   `tools/compile.html` compiles every id to its **own** `.mind` and reports feature
+   counts. Want **>1500 matching points** with keypoints spread across the label;
+   sparse or corner-clustered tracks badly and no runtime tuning fixes it.
+
+4. **Place the assets:**
 
    ```
-   targets.mind    compiled target
-   label.jpg       the same crop, drawn behind the video
-   avatar.mp4      the talking clip
+   assets/labels/<id>/targets.mind
+   assets/characters/<id>/<file>.mp4
    ```
 
-4. **Add an entry to `wines.js`.** Copy an existing one. The only value you must get
-   right by hand is `target: { w, h }` — the pixel size of the image you compiled.
-   MindAR normalises a target to 1 unit wide, so that ratio sets the label plane's
-   aspect, and a wrong value stretches everything.
+5. **Add entries to `wines.js`** — one in `LABELS`, one in `CHARACTERS`. The Quanta
+   labels share `QUANTA_LABEL`, so a new one is a single spread. The values you must
+   get right by hand are `target: { w, h }` (pixel size of the compiled image — a
+   wrong ratio stretches everything) and `target.chordMm` (how wide that region reads
+   straight across the bottle; `warp-targets.py` prints it).
 
-5. **Align the video** (below).
-
-6. **Point a QR code** at `?wine=<id>`. Ids are baked into printed labels — pick one
-   you can live with and never change it.
+6. **Align the video** (below), then **point a QR code** at `?wine=<id>`. Ids are
+   baked into printed labels — pick one you can live with and never change it.
 
 No changes to `app.js` at any point.
+
+For a label that only exists physically, photograph it on the bottle straight on, crop
+tight (background in the target gets learned and then isn't there at runtime), and skip
+step 3's pre-warp — a photo already carries the cylindrical projection.
 
 ---
 
@@ -105,15 +153,18 @@ Two things to watch for, both learned the hard way on the first clip:
 
 ## Design notes
 
-**Two planes, no chroma key.** A static `label.jpg` covers the whole target, and the
-video sits in front of it. The PRD originally called for a green-screen clip and a
-chroma-key shader; that became unnecessary once the video was generated rather than
-filmed. It also removes the worst failure mode — H.264 stores colour at quarter
-resolution, so keyed edges fringe badly and no shader recovers it.
+**No chroma key.** The PRD originally called for a green-screen clip and a chroma-key
+shader. That became unnecessary once the video was generated from the label rather than
+filmed — there is no background to remove. It also dodges the worst failure mode: H.264
+stores colour at quarter resolution, so keyed edges fringe badly and no shader recovers
+it.
 
-The back plane matters more than it looks. Without it the video's edge would blend
-against the *physical* label under whatever light the room happens to have, and the
-brightness would never match. With it, both sides of the seam are textures we control.
+**Video only, no back panel.** `LABELS[id].still` is `null` by default, so only the
+video is drawn. A digital copy of the label was tried first, to keep the video's edge
+blending against a texture we control rather than against the physical label under
+unknown light. It looked worse than the seam it was avoiding — a flat photo pasted over
+a correctly-lit, correctly-curved real label. Set `still: 'label.jpg'` per label to
+bring it back if a clip's edge will not sit quietly.
 
 **Version pinning.** `mind-ar` 1.2.5 against A-Frame 1.3.0, pinned exactly in
 `index.html`. An unpinned "latest" A-Frame silently produces a blank scene.
@@ -122,11 +173,24 @@ Also note `mindar-image.prod.js` (used by the compiler) is an **ES module** and 
 `import`ed; the `-aframe` build used here is a classic script. Mixing them up costs an
 hour.
 
-**Audio.** Mobile browsers block audio-enabled playback that isn't the direct result of
-a user gesture. The tap gate calls `play()` then `pause()` inside the tap to mark the
-element user-activated, so playback on `targetFound` is allowed to carry sound. The
-scene isn't attached until that tap either, which puts the camera prompt behind a
-deliberate action rather than a page load.
+**Audio, and why there is exactly one `<video>` element.** Mobile browsers block
+audio-enabled playback that is not the direct result of a user gesture. The tap gate
+fires `play()` inside the tap to mark the element user-activated, and playback on
+`targetFound` is then allowed to carry sound. The scene is not attached until that tap
+either, which puts the camera prompt behind a deliberate action rather than a page load.
+
+That activation lives on the **element**, not the page, so the cast selector reassigns
+`.src` on the same element rather than creating a new one. Create a fresh element per
+switch and every character after the first is silent.
+
+Two related traps, both of which bit during development:
+
+- The clip must be preloaded *while the gate is displayed*. iOS drops the gesture if you
+  `await` anything before calling `play()`, and calling `play()` on an element with no
+  `src` never settles at all — the app just hangs, with nothing in the console.
+- Reassigning `.src` drops `readyState` to 0, and rendering in that window uploads a
+  zero-sized video texture: a transient `GL_INVALID_VALUE` and a visible flash. The
+  panel is hidden across the swap, so the physical label shows through instead.
 
 **Per-edge fading, not one number.** The four edges of the video panel are not
 equivalent. The top lands on the printed torn-paper edge — already an irregular,
@@ -174,10 +238,20 @@ not recognise — a `"comment"` field inside a headers rule fails the build with
 *"should NOT have additional property"*, and because a failed build keeps serving the
 previous deployment, the symptom looks like the deploy simply not happening.
 
-**Curvature.** MindAR fits a flat homography, but a wine label is wrapped around a
-cylinder. Registration is good in the centre and drifts at the left and right edges.
-If it becomes objectionable, the fix is a curved geometry matching the bottle radius
-instead of `a-plane` — roughly 20 lines, not yet needed.
+**Pre-warped targets.** Flat artwork makes a poor target: MindAR fits a homography, but
+the camera sees a label wrapped round a bottle. `tools/warp-targets.py` applies the
+cylindrical projection first, so the reference matches what the camera actually sees —
+the same condition the original photographed target had baked in, minus the lighting,
+noise and lens distortion. It displaces z only; x is already the projected
+`R*sin(theta)`, and bending x too would apply the foreshortening twice.
+
+`python3 tools/warp-targets.py --test` checks the projection without touching files:
+analytic round trip, monotonicity, centre scale 1.0, and a pixel-grid round trip.
+
+**Curvature at render time.** MindAR still solves the *pose* as a flat plane, so
+registration drifts at extreme angles no matter what. The rendered surface, though, is
+a partial cylinder (`curved-panel` geometry) matching the bottle — derived from
+`target.chordMm` and `bottle.diameterMm`, not guessed.
 
 ---
 

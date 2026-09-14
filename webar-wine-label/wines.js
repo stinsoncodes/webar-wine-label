@@ -29,7 +29,7 @@
 //   chord, of which the target keeps the central 83.8% = 58.6mm -> curve 50.5deg.
 const QUANTA_LABEL = {
   variant: 'Quanta Edition',
-  target: { w: 989, h: 2464, chordMm: 58.6 },
+  target: { w: 500, h: 1246, chordMm: 58.6 },
   bottle: { diameterMm: 76 },
 
   // Edge fade widths in label-width units; a scalar, {top, side, bottom}, or all

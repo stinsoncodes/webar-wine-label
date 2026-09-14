@@ -20,6 +20,7 @@
 </style>
 
 <div id="hud">
+  <div><b>Target</b><span id="tgt">–</span></div>
   <div><b>Status</b><span id="state" class="miss">initialising</span></div>
   <div><b>Locked target</b><span id="idx">–</span></div>
   <div><b>Time to first lock</b><span id="ttl">–</span></div>
@@ -32,12 +33,17 @@
 const q = new URLSearchParams(location.search);
 const num = Math.max(1, parseInt(q.get('targets') || '1', 10));
 
+// ?target=<label-id> tests any compiled label, read straight from the app's own
+// assets so there is no second copy of a 650KB .mind to keep in sync.
+const TARGET = (q.get('target') || '19-crimes-cabernet').replace(/[^a-z0-9-]/gi, '');
+const TARGET_SRC = `../assets/labels/${TARGET}/targets.mind`;
+
 // Tracker tuning, overridable from the query string so you can A/B without editing files.
 //   filterMinCF  lower  = smoother, laggier
 //   filterBeta   higher = snappier, jitterier
 //   missTolerance  frames of loss tolerated before firing targetLost
 const cfg = [
-  'imageTargetSrc: ./targets.mind',
+  'imageTargetSrc: ' + TARGET_SRC,
   'maxTrack: 1',
   'uiScanning: no',
   'uiLoading: no',
@@ -89,6 +95,7 @@ document.body.appendChild(scene);
 
 // ---- stats ----
 const el = id => document.getElementById(id);
+el('tgt').textContent = TARGET;
 let t0 = null, firstLock = null, locked = false, lockedMs = 0, lastTick = null;
 let nFound = 0, nLost = 0;
 
