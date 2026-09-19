@@ -118,14 +118,26 @@ export const CHARACTERS = {
   bo: {
     name: 'Bo',
     video: {
-      file: 'bo.mp4',
-      // HeyGen returned 1080x1920 filling the frame — no pillarbox to trim.
-      crop:  { x: 0, y: 0, w: 1, h: 1 },
-      // Fitted by correlating a frame against the label master (NCC 0.942): the
-      // clip covers arc -22.96..+17.97mm of the label, top landing on the torn
-      // edge. Converted to projected chord units, which is what the panel uses.
-      // Not centred because HeyGen framed on the face, which sits left of centre.
-      place: { x: -0.0366, y: -0.6254, w: 0.6637 },
+      // Landscape (16:9) output wraps far better than the 9:16 version: it covers
+      // 0.93 units of the label instead of 0.66, and HeyGen preserved the input
+      // framing rather than zooming into the face. bo.mp4 is the superseded 9:16
+      // attempt, kept only for comparison.
+      file: 'bo-landscape.mp4',
+
+      // HeyGen pillarboxed the portrait content into 1920x1080 with WHITE bars
+      // either side; this trims them. Measured, not guessed: content occupies
+      // columns 0.265..0.735, full height.
+      crop:  { x: 0.265, y: 0, w: 0.47, h: 1 },
+
+      // Fitted by FFT cross-correlation against the label master, NCC 0.912:
+      // the clip maps to label x 0.1271..0.8125, which is the face crop's
+      // 0.1330..0.8130 recovered independently — so the generator returned the
+      // input framing intact. Converted to projected chord units for the panel.
+      place: { x: -0.0318, y: -0.6254, w: 0.9296 },
+
+      // Wider panel means the shared 0.05 side fade covers proportionally less of
+      // it, and these edges cut across uniform wall with nothing to hide behind.
+      feather: { top: 0.01, side: 0.09, bottom: 0.09 },
     },
   },
   dan:      { name: 'Dan',      video: null },
