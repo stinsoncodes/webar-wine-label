@@ -49,8 +49,15 @@ With no `?wine=`, or an unknown id, the app shows a picker listing every label.
 ## Watch mode — for people who don't have a bottle
 
 ```
+?watch=1                 the PICKER, already set to watch — the link to send if you
+                         want someone to choose for themselves
 ?wine=loren&watch=1      Loren's label on screen, tap to play, sound on, no camera
 ```
+
+`?watch=1` has to carry the mode in the URL rather than lean on the remembered
+switch: the preference lives in the *sender's* browser and tells a recipient
+nothing, so without it a plain link drops them into the bottle flow and asks for a
+camera they have no use for.
 
 Same label, same cast selector, same audio; the camera and the tracker are simply
 not involved. The label is drawn as a curved panel — `label-display.jpg`, the same

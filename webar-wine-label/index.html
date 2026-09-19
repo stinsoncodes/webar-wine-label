@@ -20,7 +20,7 @@
 <!-- Label picker: shown when no ?wine= is given, or the id isn't in the manifest. -->
 <div id="picker" hidden>
   <h1>Talking Wine Label</h1>
-  <p class="sub">Scan the code on a bottle, or choose one.</p>
+  <p class="sub" id="picker-sub">Scan the code on a bottle, or choose one.</p>
   <!-- Bottle / no-bottle switch. Rewrites the links below to add &watch=1; it
        never affects a ?wine= link arriving from a printed QR code, which must
        always open the AR view. -->
@@ -29,8 +29,7 @@
     <button type="button" data-mode="watch">No bottle</button>
   </div>
   <p class="hint" id="mode-note" hidden>
-    These links play the video on screen &mdash; no bottle and no camera needed.
-    Send someone their own.
+    Plays on screen &mdash; no bottle and no camera needed.
   </p>
   <div id="picker-list"></div>
   <p class="hint" id="picker-hint" hidden></p>

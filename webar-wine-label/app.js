@@ -192,7 +192,13 @@ function showPicker (hint) {
   // whether the thirteen rows below point at the AR view or at watch mode. It
   // cannot affect a ?wine= link arriving from a printed QR code, which never
   // reaches this screen.
-  let mode = stored('mode') === 'watch' ? 'watch' : 'ar'
+  //
+  // `?watch=1` with no `?wine=` is the landing page you can send anybody: the
+  // picker, arriving already set to watch. The URL has to carry it, because the
+  // remembered preference lives in the SENDER's browser and tells a recipient
+  // nothing — without this a plain link would drop them into the bottle flow and
+  // ask for a camera they have no use for.
+  let mode = watch || stored('mode') === 'watch' ? 'watch' : 'ar'
 
   const href = id => '?wine=' + encodeURIComponent(id) +
     (mode === 'watch' ? '&watch=1' : '') +
@@ -216,6 +222,10 @@ function showPicker (hint) {
   const modeEl = $('mode')
   const applyMode = () => {
     rows.forEach((a, i) => { a.href = href(labelIds[i]) })
+    // Reads for a recipient, not just for whoever is sending it.
+    $('picker-sub').textContent = mode === 'watch'
+      ? 'Choose who you would like to hear from.'
+      : 'Scan the code on a bottle, or choose one.'
     if (!modeEl) return
     modeEl.querySelectorAll('button').forEach(b =>
       b.classList.toggle('on', b.dataset.mode === mode))
