@@ -30,6 +30,7 @@ AFRAME.registerShader('label-video', {
     cropScale:  { type: 'vec2', is: 'uniform', default: { x: 1, y: 1 } },
     featherUV:  { type: 'vec4', is: 'uniform', default: { x: 0, y: 0, z: 0, w: 0 } },
     gain:       { type: 'vec3', is: 'uniform', default: { x: 1, y: 1, z: 1 } },
+    unwarp:     { type: 'number', is: 'uniform', default: 0 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -44,6 +45,7 @@ AFRAME.registerShader('label-video', {
     uniform vec2 cropScale;
     uniform vec4 featherUV;   // top, right, bottom, left
     uniform vec3 gain;
+    uniform float unwarp;     // panel half-arc, radians; 0 = texture already projected
     varying vec2 vUv;
 
     // Distance-to-edge ramp; a width of 0 disables that edge entirely.
@@ -52,7 +54,16 @@ AFRAME.registerShader('label-video', {
     }
 
     void main() {
-      vec4 c = texture2D(src, cropOffset + vUv * cropScale);
+      // The panel's x is a PROJECTED coordinate (curved-panel displaces z only),
+      // but a clip generated from flat label artwork is linear in ARC length.
+      // Convert before sampling, or the picture stretches toward the panel's
+      // edges — 5% on a typical crop. This is the exact inverse of the
+      // projection tools/warp-targets.py applies to the tracking targets.
+      vec2 uv = vUv;
+      if (unwarp > 0.0001) {
+        uv.x = 0.5 + asin((2.0 * uv.x - 1.0) * sin(unwarp)) / (2.0 * unwarp);
+      }
+      vec4 c = texture2D(src, cropOffset + uv * cropScale);
       float a = edge(1.0 - vUv.y, featherUV.x)   // top
               * edge(1.0 - vUv.x, featherUV.y)   // right
               * edge(vUv.y,       featherUV.z)   // bottom
@@ -246,10 +257,17 @@ async function start () {
   // unlock lives on the ELEMENT, so it survives every later src swap and is what
   // keeps the cast selector audible. Do not await it: an element whose source is
   // still loading may not settle, and awaiting first loses the gesture on iOS.
-  const p = video.play()
-  if (p && p.then) {
-    p.then(() => { if (!locked) video.pause() })
-     .catch(e => console.warn('audio unlock failed:', e.message))
+  //
+  // Skipped in preview: there is no gesture to preserve and no audio wanted, and
+  // the unlock's trailing pause() would race preview's own play() and leave the
+  // clip frozen on frame 0 — which looks exactly like the still label rendering
+  // with no video at all.
+  if (!preview) {
+    const p = video.play()
+    if (p && p.then) {
+      p.then(() => { if (!locked) video.pause() })
+       .catch(e => console.warn('audio unlock failed:', e.message))
+    }
   }
 
   if (video.readyState < 1) {
@@ -293,6 +311,7 @@ async function loadClip (charId) {
 // ---------------------------------------------------------------------------
 
 let charId = initialChar
+let flatSource = true
 let crop, place, croppedAspect, feather, curve, gain, front, back, anchor
 let scene, cam, locked = false, onGain = null, matchTimer = null
 const preview = q.get('preview') === '1'
@@ -332,10 +351,10 @@ function buildScene () {
 
   const assets = document.createElement('a-assets')
   assets.appendChild(video)
-  if (label.still) {
+  if (label.still || q.get('still') === '1') {
     const img = document.createElement('img')
     img.id = 'still'
-    img.src = `./${labelDir(wantedLabel)}/${label.still}`
+    img.src = `./${labelDir(wantedLabel)}/${label.still || 'label.jpg'}`
     img.crossOrigin = 'anonymous'
     assets.appendChild(img)
   }
@@ -355,7 +374,12 @@ function buildScene () {
   // physical label is already there, perfectly registered and perfectly lit, and
   // covering it with a photo of itself is strictly worse than leaving it alone.
   back = null
-  if (label.still) {
+  // ?still=1 forces the backing label on. Off in normal use — the physical label
+  // is already there and better lit — but invaluable for aligning a clip in
+  // ?preview=1 with no bottle in reach. The image is the PRE-WARPED target, so it
+  // shares the panel's projected geometry.
+  const wantStill = label.still || (q.get('still') === '1' ? 'label.jpg' : null)
+  if (wantStill) {
     back = panel(1, labelH, curve)
     back.setAttribute('material', 'shader: flat; src: #still; transparent: false')
     anchor.appendChild(back)
@@ -383,6 +407,9 @@ function buildScene () {
   // onto a character you switched to would silently mis-place their clip.
   function readCharacter (id, allowOverrides) {
     const v = CHARACTERS[id].video
+    // Clips generated from the flat label artwork need unwarping onto the curved
+    // panel. Set flatSource: false for a clip that is already projected.
+    flatSource = v.flatSource !== false && q.get('unwarp') !== '0'
     const o = allowOverrides ? num : (_k, d) => d
     crop = {
       x: o('cx', v.crop?.x ?? 0), y: o('cy', v.crop?.y ?? 0),
@@ -401,7 +428,19 @@ function buildScene () {
   }
 
   function applyVideo () {
-    const vh = place.w / croppedAspect
+    // A flat-source clip covers more ARC than its chord width suggests, so its
+    // height must be derived from the arc, not from the chord. Getting this wrong
+    // squashes the panel ~5% vertically.
+    const R = (label.bottle?.diameterMm || 0) / 2
+    const chordMm = label.target.chordMm || 0
+    let unwarp = 0
+    let spanUnits = place.w
+    if (flatSource && R > 0 && chordMm > 0) {
+      const s = Math.min(0.9999, (place.w * chordMm / 2) / R)
+      unwarp = Math.asin(s)
+      spanUnits = (2 * R * unwarp) / chordMm
+    }
+    const vh = spanUnits / croppedAspect
     front.setAttribute('geometry',
       `primitive: curved-panel; width: ${place.w}; height: ${vh}; curve: ${curve}`)
     if (back) {
@@ -449,6 +488,7 @@ function buildScene () {
       `cropScale: ${crop.w} ${crop.h}`,
       `featherUV: ${fUV.join(' ')}`,
       `gain: ${gain.join(' ')}`,
+      `unwarp: ${unwarp.toFixed(6)}`,
     ].join('; '))
   }
 

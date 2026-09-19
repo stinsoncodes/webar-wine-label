@@ -90,6 +90,12 @@ export const LABELS = {
 //
 // Both belong to the video, not the label. They do NOT have to match across
 // characters — each clip just has to say where it sits in label coordinates.
+//
+// place.w is the panel's CHORD width. A clip generated from flat label artwork is
+// linear in arc length, so the shader unwarps it onto the curved panel and derives
+// the panel height from the arc rather than the chord — without that the picture
+// stretches at the edges and the panel sits ~5% short. Set flatSource: false on a
+// clip that is already projected, or pass ?unwarp=0 to compare.
 // Tune with ?wine=<id>&tune=1 and paste back with Copy manifest.
 
 export const CHARACTERS = {
@@ -109,7 +115,19 @@ export const CHARACTERS = {
   kyle:     { name: 'Kyle',     video: null },
   scot:     { name: 'Scot',     video: null },
   julie:    { name: 'Julie',    video: null },
-  bo:       { name: 'Bo',       video: null },
+  bo: {
+    name: 'Bo',
+    video: {
+      file: 'bo.mp4',
+      // HeyGen returned 1080x1920 filling the frame — no pillarbox to trim.
+      crop:  { x: 0, y: 0, w: 1, h: 1 },
+      // Fitted by correlating a frame against the label master (NCC 0.942): the
+      // clip covers arc -22.96..+17.97mm of the label, top landing on the torn
+      // edge. Converted to projected chord units, which is what the panel uses.
+      // Not centred because HeyGen framed on the face, which sits left of centre.
+      place: { x: -0.0366, y: -0.6254, w: 0.6637 },
+    },
+  },
   dan:      { name: 'Dan',      video: null },
   jayshree: { name: 'Jayshree', video: null },
   jeff:     { name: 'Jeff',     video: null },
