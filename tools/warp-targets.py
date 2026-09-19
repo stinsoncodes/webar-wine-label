@@ -3,6 +3,8 @@
 
     python3 tools/warp-targets.py --test     # verify the projection, no files
     python3 tools/warp-targets.py            # warp source/labels/ -> source/targets/
+    python3 tools/warp-targets.py --display  # same warp at display resolution,
+                                             # straight into the app's assets
 
 WHY: MindAR fits a planar homography, but the camera sees a label wrapped round a
 bottle. Feeding it flat artwork makes the reference disagree with reality at the
@@ -134,6 +136,48 @@ def test():
     return 0 if (err < 1e-9 and mono and ok) else 1
 
 
+# Watch mode (?watch=1) shows this same pre-warped label as a texture filling a
+# phone screen, where the 500px tracking target upscales about 1.8x and reads
+# soft — the serif copy worst of all. So --display writes a second, larger copy
+# of the identical warp for that one purpose. It must stay geometrically identical
+# to the target or the video panel would no longer line up with the label behind
+# it; only the pixel count differs.
+DISPLAY_WIDTH = 1000
+DISPLAY_QUALITY = 86
+DISPLAY_NAME = 'label-display.jpg'
+
+
+def display():
+    """Write the same warp at display resolution into assets/labels/<id>/."""
+    src = os.path.join(HERE, 'source', 'labels')
+    app = os.path.join(HERE, 'webar-wine-label', 'assets', 'labels')
+    first = Image.open(os.path.join(src, f'{IDS[0]}.png'))
+    g = geometry(first.width)
+    print(f'source {first.width}x{first.height} -> warped {g["out_w"]}x{first.height}'
+          f' -> display {DISPLAY_WIDTH}px wide, q{DISPLAY_QUALITY}')
+    print(f'tracking target is {OUT_WIDTH}px wide; this is '
+          f'{DISPLAY_WIDTH/OUT_WIDTH:.1f}x that, same geometry\n')
+    total = 0
+    for pid in IDS:
+        p = os.path.join(src, f'{pid}.png')
+        if not os.path.exists(p):
+            sys.exit(f'missing {p} — run tools/prepare-labels.py first')
+        d = os.path.join(app, pid)
+        if not os.path.isdir(d):
+            sys.exit(f'no such label dir {d} — compile the target first')
+        im = Image.open(p).convert('RGB')
+        out = warp(im, geometry(im.width))
+        out = out.resize((DISPLAY_WIDTH, round(out.height * DISPLAY_WIDTH / out.width)),
+                         Image.LANCZOS)
+        f = os.path.join(d, DISPLAY_NAME)
+        out.save(f, quality=DISPLAY_QUALITY, optimize=True, progressive=True)
+        kb = os.path.getsize(f) / 1024
+        total += kb
+        print(f'  {pid:<9} {out.width}x{out.height}  {kb:6.0f} KB')
+    print(f'\n{len(IDS)} stills -> assets/labels/<id>/{DISPLAY_NAME}  '
+          f'({total/1024:.1f} MB total, one downloaded per viewer)')
+
+
 def main():
     src = os.path.join(HERE, 'source', 'labels')
     dst = os.path.join(HERE, 'source', 'targets')
@@ -161,4 +205,8 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(test() if '--test' in sys.argv else (main() or 0))
+    if '--test' in sys.argv:
+        sys.exit(test())
+    if '--display' in sys.argv:
+        sys.exit(display() or 0)
+    sys.exit(main() or 0)

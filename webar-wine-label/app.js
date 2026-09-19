@@ -174,6 +174,9 @@ function boot () {
   } else if (q.get('preview') === '1') {
     start()        // no camera, muted video: nothing needs a user gesture
   } else {
+    // Both AR and watch mode come through the gate. Watch mode has no camera to
+    // ask for, but it still needs the tap: audio playback is gated on a gesture,
+    // and a silent talking label is not worth sending anyone.
     showGate()
   }
 }
@@ -184,18 +187,63 @@ function showPicker (hint) {
     fatal('No labels are configured. Add an entry to wines.js.')
     return
   }
-  labelIds.forEach(id => {
+
+  // The bottle / no-bottle switch is nothing but a link rewriter: it decides
+  // whether the thirteen rows below point at the AR view or at watch mode. It
+  // cannot affect a ?wine= link arriving from a printed QR code, which never
+  // reaches this screen.
+  let mode = stored('mode') === 'watch' ? 'watch' : 'ar'
+
+  const href = id => '?wine=' + encodeURIComponent(id) +
+    (mode === 'watch' ? '&watch=1' : '') +
+    (q.get('tune') ? '&tune=1' : '')
+
+  const rows = labelIds.map(id => {
     const l = LABELS[id]
     const a = document.createElement('a')
     a.className = 'wine'
-    a.href = '?wine=' + encodeURIComponent(id) + (q.get('tune') ? '&tune=1' : '')
     a.innerHTML = '<b></b><span></span>'
     a.firstChild.textContent = l.name
     a.lastChild.textContent = l.variant || id
     list.appendChild(a)
+    return a
   })
+
+  // Degrade to plain AR links rather than throwing if the switch is not in the
+  // markup. A stale cached index.html against a fresh app.js is a real failure
+  // mode — it happened during development — and the picker going blank is a far
+  // worse outcome than a missing toggle.
+  const modeEl = $('mode')
+  const applyMode = () => {
+    rows.forEach((a, i) => { a.href = href(labelIds[i]) })
+    if (!modeEl) return
+    modeEl.querySelectorAll('button').forEach(b =>
+      b.classList.toggle('on', b.dataset.mode === mode))
+    $('mode-note').hidden = mode !== 'watch'
+    store('mode', mode)
+  }
+  if (modeEl) {
+    modeEl.addEventListener('click', e => {
+      const m = e.target.dataset.mode
+      if (m && m !== mode) { mode = m; applyMode() }
+    })
+  } else {
+    mode = 'ar'
+  }
+  applyMode()
+
   if (hint) { $('picker-hint').textContent = hint; $('picker-hint').hidden = false }
   $('picker').hidden = false
+}
+
+// Remembering the switch saves thirteen extra taps when sending thirteen links.
+// Storage is a convenience only — it is per-browser, it can throw in a private
+// window, and the page must read correctly without it.
+function stored (k) {
+  try { return localStorage.getItem('wl-' + k) } catch { return null }
+}
+function store (k, v) {
+  try { localStorage.setItem('wl-' + k, v) } catch { /* private mode */ }
 }
 
 function fatal (msg) {
@@ -226,6 +274,11 @@ function showGate () {
   // play synchronously — which means the source must already be set.
   const char = CHARACTERS[initialChar]
   if (char && char.video) video.src = `./${charDir(initialChar)}/${char.video.file}`
+
+  if (watch) {
+    $('gate-btn').textContent = 'Tap to play'
+    $('gate-hint').textContent = 'No bottle needed. Sound on.'
+  }
 
   $('gate').hidden = false
   $('gate-btn').addEventListener('click', start, { once: true })
@@ -315,6 +368,20 @@ let flatSource = true
 let crop, place, croppedAspect, feather, curve, gain, front, back, anchor
 let scene, cam, locked = false, onGain = null, matchTimer = null
 const preview = q.get('preview') === '1'
+
+// Watch mode: the whole experience for someone who has no bottle. Same label,
+// same cast selector, same audio — the camera and the tracker are simply not
+// involved. It is opt-in and never a default, because a printed QR encodes a bare
+// ?wine= and whoever scans it is holding the bottle and wants the AR moment.
+//
+// Distinct from ?preview=1, which is the alignment tool: that one skips the tap
+// gate and plays muted, which is exactly wrong for watching.
+const watch = q.get('watch') === '1'
+
+// True whenever nothing is coming from a camera. Everything that exists only
+// because of tracking — MindAR itself, the target anchor, the scan prompt, the
+// exposure matcher — keys off this; only the muting keys off `preview` alone.
+const noAR = preview || watch
 const FOV = 80
 
 function buildScene () {
@@ -328,11 +395,21 @@ function buildScene () {
   gain = [1, 1, 1]
   readCharacter(charId, true)
 
+  // Which label image, if any, goes behind the clip.
+  //
+  // In AR there should be none: the physical label is already there, perfectly
+  // registered and perfectly lit, so ?still=1 is an alignment aid only. In watch
+  // mode it is the entire picture, and it uses the DISPLAY copy — the same warp at
+  // twice the width, because the tracking target is deliberately small (500px) and
+  // filling a phone screen with it upscales ~1.8x and reads soft.
+  const stillFile = label.still ||
+    (watch ? 'label-display.jpg' : q.get('still') === '1' ? 'label.jpg' : null)
+
   const track = { ...DEFAULT_TRACKING, ...(label.tracking || {}) }
   for (const k of Object.keys(track)) track[k] = num(k, track[k])
 
   scene = document.createElement('a-scene')
-  if (!preview) {
+  if (!noAR) {
     scene.setAttribute('mindar-image', [
       `imageTargetSrc: ./${labelDir(wantedLabel)}/targets.mind`,
       'maxTrack: 1',
@@ -351,10 +428,10 @@ function buildScene () {
 
   const assets = document.createElement('a-assets')
   assets.appendChild(video)
-  if (label.still || q.get('still') === '1') {
+  if (stillFile) {
     const img = document.createElement('img')
     img.id = 'still'
-    img.src = `./${labelDir(wantedLabel)}/${label.still || 'label.jpg'}`
+    img.src = `./${labelDir(wantedLabel)}/${stillFile}`
     img.crossOrigin = 'anonymous'
     assets.appendChild(img)
   }
@@ -368,7 +445,7 @@ function buildScene () {
   scene.appendChild(cam)
 
   anchor = document.createElement('a-entity')
-  if (!preview) anchor.setAttribute('mindar-image-target', 'targetIndex: 0')
+  if (!noAR) anchor.setAttribute('mindar-image-target', 'targetIndex: 0')
 
   // Optional back panel: a digital copy of the whole label. Off by default — the
   // physical label is already there, perfectly registered and perfectly lit, and
@@ -378,8 +455,7 @@ function buildScene () {
   // is already there and better lit — but invaluable for aligning a clip in
   // ?preview=1 with no bottle in reach. The image is the PRE-WARPED target, so it
   // shares the panel's projected geometry.
-  const wantStill = label.still || (q.get('still') === '1' ? 'label.jpg' : null)
-  if (wantStill) {
+  if (stillFile) {
     back = panel(1, labelH, curve)
     back.setAttribute('material', 'shader: flat; src: #still; transparent: false')
     anchor.appendChild(back)
@@ -476,7 +552,7 @@ function buildScene () {
     // Frame the preview camera on whatever is actually rendered. With the back
     // panel off, the label plane no longer exists and framing to its height would
     // point the camera at empty space above the video.
-    if (preview) {
+    if (noAR) {
       const fitH = back ? labelH : vh
       const fitY = back ? 0 : place.y
       const wide = back ? 1 : place.w
@@ -544,7 +620,7 @@ function buildScene () {
     pushGain()
     if (locked || preview) {
       video.play().catch(() => {})
-      if (!preview) startMatching()
+      if (!noAR) startMatching()
     }
     markCast()
     // Keep the URL honest so a reload or a share reproduces what is on screen.
@@ -725,6 +801,50 @@ function buildScene () {
     })
   }
 
+  // Watch mode has no targetFound to hang playback on, so the label counts as
+  // permanently in view: `locked` is what setCharacter and the visibility handler
+  // test to decide whether a clip should be running, and leaving it false would
+  // leave the page silent and frozen on frame 0.
+  function wireWatch () {
+    $('scan').hidden = true
+    locked = true
+    video.muted = false
+    video.play().catch(e => console.warn('play blocked:', e.message))
+    // Never leave audio running in a backgrounded tab.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) video.pause()
+      else if (locked) video.play().catch(() => {})
+    })
+  }
+
+  // Share whatever the URL actually says, ?as= included, so what arrives is what
+  // was on screen. navigator.share gets the native sheet on a phone; the
+  // clipboard is the desktop fallback.
+  function buildShare () {
+    const btn = $('share-btn')
+    const flash = msg => {
+      const was = btn.dataset.label || btn.textContent
+      btn.dataset.label = was
+      btn.textContent = msg
+      setTimeout(() => { btn.textContent = was }, 1600)
+    }
+    btn.hidden = false
+    btn.addEventListener('click', async () => {
+      const url = location.href
+      const title = `${CHARACTERS[charId].name} \u2014 Talking Wine Label`
+      if (navigator.share) {
+        try { await navigator.share({ title, url }) } catch { /* cancelled */ }
+        return
+      }
+      try {
+        await navigator.clipboard.writeText(url)
+        flash('Link copied')
+      } catch {
+        flash('Copy failed')
+      }
+    })
+  }
+
   // --- alignment panel ------------------------------------------------------
 
   function buildTuner () {
@@ -761,7 +881,7 @@ function buildScene () {
 
     // Live gain readout. Without this there is no way to tell whether the matcher
     // is working, stuck, or pinned against a clamp.
-    if (!preview) {
+    if (!noAR) {
       const row = document.createElement('div')
       row.className = 'tune-row'
       row.innerHTML = '<label>gain</label><output class="wide"></output>'
@@ -807,13 +927,31 @@ function buildScene () {
   // function body: calling earlier reaches const/let bindings further down the
   // file that are still in their temporal dead zone — which is exactly how
   // buildCast() ended up crashing on closeCast.
-  if (!preview) wireTracking()
-  else {
+  if (!noAR) wireTracking()
+  else if (preview) {
     $('scan').hidden = true
     video.muted = true          // no gesture behind an auto-started preview
     video.play().catch(() => {})
+  } else {
+    wireWatch()
+  }
+
+  // With no camera, the view is framed by moving our own camera back far enough to
+  // fit the label — and that distance depends on the viewport aspect. Computed
+  // once it would be wrong the moment a phone is rotated or a laptop window
+  // resized, cropping the label. Re-fit on resize. Deferred, because iOS reports
+  // the old viewport size during orientationchange.
+  if (noAR) {
+    let t = null
+    const refit = () => {
+      clearTimeout(t)
+      t = setTimeout(applyVideo, 120)
+    }
+    window.addEventListener('resize', refit)
+    window.addEventListener('orientationchange', refit)
   }
   buildCast()
+  if (watch) buildShare()
   if (q.get('tune')) buildTuner()
 }
 

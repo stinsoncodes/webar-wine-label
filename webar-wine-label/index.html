@@ -21,6 +21,17 @@
 <div id="picker" hidden>
   <h1>Talking Wine Label</h1>
   <p class="sub">Scan the code on a bottle, or choose one.</p>
+  <!-- Bottle / no-bottle switch. Rewrites the links below to add &watch=1; it
+       never affects a ?wine= link arriving from a printed QR code, which must
+       always open the AR view. -->
+  <div id="mode" role="group" aria-label="How to watch">
+    <button type="button" data-mode="ar" class="on">I have the bottle</button>
+    <button type="button" data-mode="watch">No bottle</button>
+  </div>
+  <p class="hint" id="mode-note" hidden>
+    These links play the video on screen &mdash; no bottle and no camera needed.
+    Send someone their own.
+  </p>
   <div id="picker-list"></div>
   <p class="hint" id="picker-hint" hidden></p>
 </div>
@@ -31,7 +42,7 @@
   <div class="gate-inner">
     <div id="gate-label"></div>
     <button id="gate-btn" type="button">Tap to begin</button>
-    <p class="hint">Uses your camera. Nothing is recorded or uploaded.</p>
+    <p class="hint" id="gate-hint">Uses your camera. Nothing is recorded or uploaded.</p>
   </div>
 </div>
 
@@ -44,6 +55,9 @@
 <!-- Cast selector. ?wine= fixes which label is tracked; this only changes whose
      clip plays on it, so the lock is never dropped. -->
 <button id="cast-btn" type="button" hidden></button>
+<!-- Watch mode only: hands the current URL to the native share sheet, so sending
+     someone their own link is one tap rather than a copy out of the address bar. -->
+<button id="share-btn" type="button" hidden>Share</button>
 <div id="cast" hidden>
   <div class="cast-head">
     <b>Who's talking?</b>

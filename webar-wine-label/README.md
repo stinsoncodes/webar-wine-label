@@ -46,13 +46,57 @@ they would cross-match constantly.
 
 With no `?wine=`, or an unknown id, the app shows a picker listing every label.
 
+## Watch mode — for people who don't have a bottle
+
+```
+?wine=loren&watch=1      Loren's label on screen, tap to play, sound on, no camera
+```
+
+Same label, same cast selector, same audio; the camera and the tracker are simply
+not involved. The label is drawn as a curved panel — `label-display.jpg`, the same
+pre-warp as the tracking target at twice the width, because the 500px target
+upscales about 1.8x filling a phone and reads soft.
+
+The picker carries an **"I have the bottle" / "No bottle"** switch that rewrites
+its thirteen links to add `&watch=1`, and watch mode itself shows a Share button
+that hands the current URL — `as=` included — to the native share sheet. So a link
+sends what was actually on screen.
+
+Three things this deliberately does NOT do:
+
+- **It is never a default.** A printed QR encodes a bare `?wine=`; whoever scans it
+  is holding the bottle and wants the AR. Watch mode only ever arrives by explicit
+  `&watch=1`.
+- **It does not restrict the cast.** A watch link is per-person in the sense that it
+  shows that person's label, not in the sense of hiding the others — the recipient
+  can play all thirteen, exactly as a bottle holder can. That is a deliberate
+  choice: anyone holding a watch link can watch everyone. `castVisible: false`
+  exists in `wines.js` for anyone who would rather not appear.
+- **It is not `?preview=1`.** Preview is the alignment tool: no gate, muted,
+  tracking-resolution still. Wrong for watching on all three counts.
+
+Everything that exists only because of tracking keys off `noAR` in `app.js` —
+MindAR, the target anchor, the scan prompt, the exposure matcher. Only the muting
+keys off `preview` alone.
+
+Because there is no camera, the view is framed by moving our own camera back far
+enough to fit the label, which depends on the viewport aspect — so it re-fits on
+resize and orientationchange. Without that, a rotated phone or a narrow desktop
+window crops the label.
+
 ## Asset layout
 
 ```
-assets/labels/<label-id>/targets.mind    compiled tracking target
-assets/labels/<label-id>/label.jpg       optional, only if LABELS[id].still is set
-assets/characters/<char-id>/<file>.mp4   the talking clip
+assets/labels/<label-id>/targets.mind        compiled tracking target
+assets/labels/<label-id>/label.jpg           tracking-resolution still, for ?still=1
+assets/labels/<label-id>/label-display.jpg   display-resolution still, for ?watch=1
+assets/characters/<char-id>/<file>.mp4       the talking clip
 ```
+
+The two stills are the same warp at different sizes: `warp-targets.py` writes the
+500px one into `source/targets/` for compiling, and `--display` writes the 1000px
+one straight into `assets/labels/`. They must stay geometrically identical or the
+video panel would no longer line up with the label behind it.
 
 ---
 
@@ -130,6 +174,7 @@ modes, both live — no redeploy:
 |---|---|
 | `?wine=<id>&preview=1&tune=1` | Head-on, no camera, no bottle. Do the rough pass here. |
 | `?wine=<id>&tune=1` | Live AR on the bottle. Confirm here. |
+| `?wine=<id>&watch=1&tune=1` | Head-on with the gate and sound, i.e. what a recipient sees. |
 
 Nudge with the on-screen panel, then **Copy manifest** and paste the snippet into
 `wines.js`. Every parameter is also settable directly in the URL — handy for jumping

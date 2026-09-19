@@ -53,10 +53,39 @@ a-scene .a-canvas { background: transparent !important; }
 
 h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -0.01em; }
 h2 { font-size: 19px; margin: 0 0 8px; }
-p.sub { margin: 0 0 28px; color: var(--dim); font-size: 14.5px; }
+p.sub { margin: 0 0 18px; color: var(--dim); font-size: 14.5px; }
 p.hint { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
 
 /* ---------- picker ---------- */
+
+/* Bottle / no-bottle switch: a two-up segmented control. Both halves are always
+   visible rather than being a checkbox, because "I have the bottle" and "no
+   bottle" are two different things you might be, not a setting with a default
+   you have to infer. */
+#mode {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 14px;
+  background: #16161b;
+  border: 1px solid #2a2a32;
+  border-radius: 12px;
+}
+#mode button {
+  flex: 1;
+  font: 600 13px/1.2 inherit;
+  color: var(--dim);
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 8px;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+#mode button.on { color: var(--fg); background: #2b2b34; }
+#mode button:not(.on):active { background: #1f1f26; }
+
+#mode-note { margin: -6px 0 14px; font-size: 12.5px; line-height: 1.45; }
 
 #picker-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
 
@@ -180,6 +209,25 @@ p.hint { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
   backdrop-filter: blur(8px);
 }
 #cast-btn:active { background: rgba(40, 40, 48, .9); }
+
+/* Mirrors the cast button to the opposite corner, so the two never collide and
+   neither has to shrink. Watch mode only. */
+#share-btn {
+  position: fixed;
+  z-index: 12;
+  top: calc(10px + env(safe-area-inset-top));
+  left: 10px;
+  font: 600 13px/1 inherit;
+  color: var(--fg);
+  background: rgba(10, 10, 12, .74);
+  border: 1px solid #3a3a44;
+  border-radius: 999px;
+  padding: 10px 15px;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+#share-btn:active { background: rgba(40, 40, 48, .9); }
 
 #cast {
   position: fixed;
