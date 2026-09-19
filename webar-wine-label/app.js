@@ -263,7 +263,10 @@ function fatal (msg) {
 
 function showGate () {
   const el = $('gate-label')
-  el.textContent = label.name
+  // In watch mode the backdrop follows the character, so name the character.
+  el.textContent = (watch && CHARACTERS[initialChar])
+    ? CHARACTERS[initialChar].name
+    : label.name
   if (label.variant) {
     const s = document.createElement('span')
     s.textContent = label.variant
@@ -395,6 +398,22 @@ function buildScene () {
   gain = [1, 1, 1]
   readCharacter(charId, true)
 
+  // WHOSE label goes behind the clip.
+  //
+  // In AR this is never a question: the bottle in your hand is the bottle in your
+  // hand, and playing Seth on Jacqui's bottle shows Jacqui's label, because that
+  // is the truth. In watch mode there is no bottle, so the honest backdrop is the
+  // label of whoever is talking.
+  //
+  // This matters because the video does not cover the whole label. The panel spans
+  // 0.9%..93.3% of the width — the face crop deliberately stops short of the
+  // vertical REG. No. text so a generator could never garble a name — and the
+  // side feather blends over another 8%, so the label's own portrait shows through
+  // the rightmost ~15%. When the clip and the label are the same person that is
+  // invisible, which is the whole point of cutting the crop from the label. When
+  // they are not, you get Jacqui's hair beside Seth's face.
+  const stillLabel = () => (watch && LABELS[charId]) ? charId : wantedLabel
+
   // Which label image, if any, goes behind the clip.
   //
   // In AR there should be none: the physical label is already there, perfectly
@@ -404,6 +423,7 @@ function buildScene () {
   // filling a phone screen with it upscales ~1.8x and reads soft.
   const stillFile = label.still ||
     (watch ? 'label-display.jpg' : q.get('still') === '1' ? 'label.jpg' : null)
+  const stillSrc = id => `./${labelDir(id)}/${stillFile}`
 
   const track = { ...DEFAULT_TRACKING, ...(label.tracking || {}) }
   for (const k of Object.keys(track)) track[k] = num(k, track[k])
@@ -428,10 +448,13 @@ function buildScene () {
 
   const assets = document.createElement('a-assets')
   assets.appendChild(video)
+  // Kept as an <a-assets> entry even though the material below takes a URL:
+  // a-assets blocks scene init until it loads, which is what stops the panel
+  // rendering untextured for a frame. The material's own fetch hits the cache.
   if (stillFile) {
     const img = document.createElement('img')
     img.id = 'still'
-    img.src = `./${labelDir(wantedLabel)}/${stillFile}`
+    img.src = stillSrc(stillLabel())
     img.crossOrigin = 'anonymous'
     assets.appendChild(img)
   }
@@ -457,7 +480,8 @@ function buildScene () {
   // shares the panel's projected geometry.
   if (stillFile) {
     back = panel(1, labelH, curve)
-    back.setAttribute('material', 'shader: flat; src: #still; transparent: false')
+    back.setAttribute('material',
+      `shader: flat; src: url(${stillSrc(stillLabel())}); transparent: false`)
     anchor.appendChild(back)
   }
 
@@ -623,10 +647,32 @@ function buildScene () {
       if (!noAR) startMatching()
     }
     markCast()
+
+    // Move the backdrop to the new character's own label, so the strips of label
+    // the video does not cover keep matching the face. Preloaded first: setting
+    // the material straight away would blank the panel for as long as the image
+    // takes to arrive.
+    if (back && watch) {
+      const src = stillSrc(stillLabel())
+      const pre = new Image()
+      pre.crossOrigin = 'anonymous'
+      pre.onload = () => back.setAttribute('material',
+        `shader: flat; src: url(${src}); transparent: false`)
+      pre.src = src
+    }
+
     // Keep the URL honest so a reload or a share reproduces what is on screen.
+    // In watch mode the label follows the character, so there is no second thing
+    // to name: the URL stays a single ?wine= for whoever is talking.
     const u = new URL(location.href)
-    if (id === wantedLabel) u.searchParams.delete('as')
-    else u.searchParams.set('as', id)
+    if (watch && LABELS[id]) {
+      u.searchParams.set('wine', id)
+      u.searchParams.delete('as')
+    } else if (id === wantedLabel) {
+      u.searchParams.delete('as')
+    } else {
+      u.searchParams.set('as', id)
+    }
     history.replaceState(null, '', u)
   }
 

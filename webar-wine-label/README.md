@@ -72,6 +72,28 @@ Three things this deliberately does NOT do:
   can play all thirteen, exactly as a bottle holder can. That is a deliberate
   choice: anyone holding a watch link can watch everyone. `castVisible: false`
   exists in `wines.js` for anyone who would rather not appear.
+
+### In watch mode the backdrop follows the character
+
+Switch character in watch mode and the label behind it changes too, and the URL
+becomes a plain `?wine=<whoever is talking>&watch=1` with no `as=`.
+
+This is not cosmetic. **The video does not cover the whole label.** The panel spans
+0.9%..93.3% of the width — the face crop deliberately stops short of the vertical
+REG. No. text so a generator could never garble somebody's name — and the side
+feather blends over another 8% of that, so the label's own portrait shows through
+the rightmost ~15%. When the clip and the label are the same person, that is
+invisible: the clip was generated from that very crop of that very label, which is
+the whole reason for cutting it from the label in the first place. When they are
+not, you get Jacqui's hair beside Seth's face.
+
+In AR this is left alone, because there the bottle in your hand is the truth and a
+foreign face on your own label is the point of the selector. Watch mode has no
+bottle, so the honest backdrop is the label of whoever is talking.
+
+`?preview=1` deliberately keeps the selected label when you switch characters — it
+is the alignment tool, and comparing a clip against a chosen label is what it is
+for.
 - **It is not `?preview=1`.** Preview is the alignment tool: no gate, muted,
   tracking-resolution still. Wrong for watching on all three counts.
 
