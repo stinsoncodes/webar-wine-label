@@ -428,29 +428,49 @@ function buildScene () {
   }
 
   function applyVideo () {
+    // The video panel is a NARROWER ARC OF THE SAME CYLINDER as the label, so it
+    // does not share the label's half-angle. `curve` is the half-arc subtended by
+    // a full 1-unit chord, and curved-panel derives its radius as
+    // (width/2)/sin(curve) — hand that angle to a 0.92-wide panel and it gets a
+    // 7% smaller radius and over-bulges by 1.4mm at the centre. Solve for the
+    // panel's own angle on the label's radius instead: sin t = w * sin(curve).
+    const T = curve * Math.PI / 180
+    const sinT = Math.sin(T)
+    const tPanel = sinT > 0 ? Math.asin(Math.min(0.9999, place.w * sinT)) : 0
+
     // A flat-source clip covers more ARC than its chord width suggests, so its
     // height must be derived from the arc, not from the chord. Getting this wrong
-    // squashes the panel ~5% vertically.
-    const R = (label.bottle?.diameterMm || 0) / 2
-    const chordMm = label.target.chordMm || 0
-    let unwarp = 0
-    let spanUnits = place.w
-    if (flatSource && R > 0 && chordMm > 0) {
-      const s = Math.min(0.9999, (place.w * chordMm / 2) / R)
-      unwarp = Math.asin(s)
-      spanUnits = (2 * R * unwarp) / chordMm
-    }
+    // squashes the panel ~5% vertically. The panel's half-arc IS the shader's
+    // unwarp angle: one quantity, used twice. (Arc in label-width units is
+    // 2*R*t = t/sin(curve), since R = 0.5/sin(curve) in those units.)
+    //
+    // Known residual: this treats the panel as if it were centred on the bottle
+    // axis. A panel offset by place.x subtends a slightly longer arc than its
+    // chord implies, so on the 13 personalised labels — whose clips sit 0.029
+    // units left of centre, because the photo crop is not centred on the label —
+    // the panel comes out 0.22% short, or 0.18mm over 146mm of label. Making
+    // curved-panel asymmetric would fix it and is not worth the complexity; the
+    // bulge error from the same approximation is 0.04mm.
+    const unwarp = flatSource ? tPanel : 0
+    const spanUnits = unwarp > 0 ? unwarp / sinT : place.w
     const vh = spanUnits / croppedAspect
+
     front.setAttribute('geometry',
-      `primitive: curved-panel; width: ${place.w}; height: ${vh}; curve: ${curve}`)
+      `primitive: curved-panel; width: ${place.w}; height: ${vh}; ` +
+      `curve: ${(tPanel * 180 / Math.PI).toFixed(4)}`)
     if (back) {
       back.setAttribute('geometry',
         `primitive: curved-panel; width: 1; height: ${labelH}; curve: ${curve}`)
     }
-    // Nudged toward the viewer so it clears the physical label and, when the back
-    // panel is on, sits in front of it. Scales with curve: a deeper bulge needs
-    // more clearance at the edges to avoid z-fighting with the panel behind.
-    const z = 0.002 + curve * 0.0002
+
+    // curved-panel measures z from each panel's OWN edges, and a narrower arc's
+    // edges sit higher up the cylinder. Without this correction the clip would lie
+    // a uniform 1.7mm behind the label surface it is meant to sit on. R(cos tPanel
+    // - cos curve) puts both panels back on one cylinder; the remainder is
+    // clearance, so the clip floats just in front of the glass and, when the back
+    // panel is on, cannot z-fight with it.
+    const datum = sinT > 0 ? (0.5 / sinT) * (Math.cos(tPanel) - Math.cos(T)) : 0
+    const z = datum + 0.002 + curve * 0.0002
     front.setAttribute('position', `${place.x} ${place.y} ${z.toFixed(5)}`)
 
     // Frame the preview camera on whatever is actually rendered. With the back
@@ -460,7 +480,7 @@ function buildScene () {
       const fitH = back ? labelH : vh
       const fitY = back ? 0 : place.y
       const wide = back ? 1 : place.w
-      const t = curve * Math.PI / 180
+      const t = back ? T : tPanel
       const bulge = t > 0.001
         ? ((wide / 2) / Math.sin(t)) * (1 - Math.cos(t))
         : 0

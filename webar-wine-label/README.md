@@ -114,7 +114,16 @@ step 3's pre-warp — a photo already carries the cylindrical projection.
 
 ## Aligning a video
 
-Generators reframe and pillarbox their output, so every clip needs alignment. Two
+**The 13 personalised clips are already aligned and share one `SHARED_CLIP`.** That is
+a property of the pipeline, not luck: each was generated from
+`source/heygen/face/<id>.png`, which `tools/prepare-labels.py` cuts at identical
+fractions of every label, and the generator returned all 13 at 1920x1080 with the
+portrait pillarboxed into the same 900px column (measured: white bars at columns
+510..1410 in all 13). So a replacement clip made the same way needs no alignment at
+all — spread `SHARED_CLIP` and it lands. A clip made any other way needs its own
+`crop`/`place`, and that is what the rest of this section is for.
+
+Generators reframe and pillarbox their output, so a new clip needs alignment. Two
 modes, both live — no redeploy:
 
 | URL | What it does |

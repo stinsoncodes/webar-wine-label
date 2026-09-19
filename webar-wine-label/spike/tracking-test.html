@@ -35,7 +35,7 @@ const num = Math.max(1, parseInt(q.get('targets') || '1', 10));
 
 // ?target=<label-id> tests any compiled label, read straight from the app's own
 // assets so there is no second copy of a 650KB .mind to keep in sync.
-const TARGET = (q.get('target') || '19-crimes-cabernet').replace(/[^a-z0-9-]/gi, '');
+const TARGET = (q.get('target') || 'bo').replace(/[^a-z0-9-]/gi, '');
 const TARGET_SRC = `../assets/labels/${TARGET}/targets.mind`;
 
 // Tracker tuning, overridable from the query string so you can A/B without editing files.
