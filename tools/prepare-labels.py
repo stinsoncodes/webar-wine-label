@@ -5,23 +5,27 @@
 
 Two outputs per person:
 
-  source/labels/<id>.png   1500x2464 — the label centre-cropped to a true
-                           3.5in x 5.75in. THIS IS THE PRINT MASTER. The slide
-                           canvas is 5 x 8.4in (aspect 0.5952) against the
-                           label's 0.6087, so ~2.3% of excess height is trimmed
-                           evenly top and bottom. Whatever goes to the printer
-                           must be this file, or the printed label will not match
-                           the compiled AR tracking target.
+  source/labels/<id>.png          the label at a true 3.5in x 5.75in. THIS IS THE
+                           PRINT MASTER. Whatever goes to the printer must be this
+                           file, or the printed label will not match the compiled AR
+                           tracking target. Any excess canvas height is trimmed
+                           evenly top and bottom; if the artwork already arrives on
+                           a 3.5:5.75 canvas that trim is simply zero.
 
-  source/heygen/window/<id>.png   1500x1227 — exactly the region of the printed
-                           label that the photo occupies, so a generated clip is
-                           framed the way the label is and its background matches
-                           the print at the seam.
+  source/heygen/window/<id>.png   exactly the region of the printed label that the
+                           photo occupies, so a generated clip is framed the way
+                           the label is and its background matches the print at the
+                           seam.
 
-  source/heygen/face/<id>.png     1020x1227 — the same pixels cropped tighter, for
-                           generators that need the subject larger in frame. Also
-                           excludes the vertical name text, so nobody's name can
-                           be warped by a generative model.
+  source/heygen/face/<id>.png     the same pixels cropped tighter, for generators
+                           that need the subject larger in frame. Also excludes the
+                           vertical name text, so nobody's name can be warped by a
+                           generative model.
+
+Sizes follow the export. An 1800px-wide export gives a 1800x2957 master at 514 DPI,
+a 1800x1471 window and a 1224x1471 face crop. Nothing downstream is pinned to a
+particular export width: the crops are fractional and the tracking targets are
+downscaled to a fixed 500px regardless.
 
 Which variant to use is an open question: generators warn that avatars fail when
 the subject is small, but the window crop is already a chest-up framing. Generate
@@ -40,19 +44,29 @@ from PIL import Image
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LABEL_W_IN, LABEL_H_IN = 3.5, 5.75
 
-# Highest point of the torn-paper edge, as a fraction of slide height.
+# Highest point of the torn-paper edge, as a fraction of the LABEL's height —
+# NOT of PowerPoint's canvas.
+#
+# This distinction matters and was learned the hard way. The constant was
+# originally a fraction of the 5 x 8.4in slide; when the artist re-laid the
+# artwork onto a correct 3.5 x 5.75 canvas, every crop would have landed ~160px
+# wrong. Expressed against the label, it survives any canvas the artwork arrives on.
 #
 # Derived from the template's own alpha channel, not detected from the render:
-# ppt/media/image2.png is 1650x1202 with the cream opaque and everything below
-# the tear transparent. Its opaque region ends between rows 603 and 703, and the
-# shape is placed at y=1.319in with height 5.833in on an 8.4028in slide, giving a
-# torn edge spanning 4.2452..4.7305in. 4.2452 / 8.4028 = 0.505213.
+# ppt/media/image2.png is 1650x1202 with the cream opaque and everything below the
+# tear transparent. Its opaque region ends between rows 603 and 703, and the shape
+# sat at y=1.319in with height 5.833in, putting the tear at 4.2452..4.7305in on a
+# slide whose label region spanned 0.0943..8.3085in. Hence
+# (4.2452 - 0.0943) / 8.2143 = 0.505323.
 #
-# Measured rather than eyeballed because detecting the cream/photo transition
-# from the composite is unreliable — a scan for sustained dark pixels latches
-# onto the serif copy higher up the label. CHECK_* below guards against this
-# constant going stale if the template is ever revised.
-TORN_TOP_FRAC = 0.505213
+# Cross-checked against pixels: in the 1500x2464 master the tear's top lands at
+# row 1245, i.e. 1245/2464 = 0.505276 — agreement to 0.009%.
+#
+# Measured rather than eyeballed because detecting the cream/photo transition from
+# the composite is unreliable: a scan for sustained dark pixels latches onto the
+# serif copy higher up the label, and a looser test on the new export gave a 159px
+# spread across the thirteen. CHECK_* below guards against this going stale.
+TORN_TOP_FRAC_OF_LABEL = 0.505323
 CHECK_CREAM_MIN = 170      # luminance well above the tear should be paper
 CHECK_PHOTO_MAX = 150      # luminance well below it should be photograph
 
@@ -121,9 +135,11 @@ def main(src_dir):
         sys.exit(f'render {W}x{H} is too short to crop to {LABEL_W_IN}:{LABEL_H_IN}')
     cut = (H - need) // 2
 
-    torn_export = TORN_TOP_FRAC * H          # highest point of the tear
-    MARGIN = 8                               # a sliver of cream above it
-    top = int(round(torn_export - cut - MARGIN))
+    # Relative to the label, so an export whose canvas already IS 3.5:5.75
+    # (cut == 0) and one carrying excess height both land in the same place.
+    torn_label = TORN_TOP_FRAC_OF_LABEL * need
+    MARGIN = 8                               # a sliver of cream above the tear
+    top = int(round(torn_label - MARGIN))
     win_h = need - top
 
     print(f'export       {W}x{H}  aspect {W/H:.4f}')
@@ -131,7 +147,8 @@ def main(src_dir):
           f'(target {LABEL_W_IN/LABEL_H_IN:.6f}, err '
           f'{abs(W/need-LABEL_W_IN/LABEL_H_IN)/(LABEL_W_IN/LABEL_H_IN)*100:.3f}%)')
     print(f'  trimmed {cut}px top and bottom; {W/LABEL_W_IN:.1f} DPI')
-    print(f'torn edge    row {torn_export:.0f} of {H} (from template geometry)')
+    print(f'torn edge    row {torn_label:.0f} of {need} in the master '
+          f'(label-relative, from template geometry)')
     print(f'heygen crop  {W}x{win_h}  aspect {W/win_h:.4f}  '
           f'= {LABEL_W_IN:.2f} x {win_h/need*LABEL_H_IN:.3f} in printed')
     print(f'  window top {top/need*LABEL_H_IN:.3f} in from label top '
@@ -148,7 +165,7 @@ def main(src_dir):
         im = Image.open(os.path.join(src_dir, f'Slide{n}.png')).convert('RGB')
         label = im.crop((0, cut, W, cut + need))
         gray = np.asarray(label.convert('L'), dtype=np.int16)
-        ok = check_torn_edge(gray, int(round(torn_export - cut)), pid)
+        ok = check_torn_edge(gray, int(round(torn_label)), pid)
         bad += 0 if ok else 1
         label.save(os.path.join(lab_dir, f'{pid}.png'))
         window = label.crop((0, top, W, need))

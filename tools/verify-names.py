@@ -22,9 +22,17 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IDS = ['jacqui', 'james', 'seth', 'kyle', 'scot', 'julie', 'bo',
        'dan', 'jayshree', 'jeff', 'karl', 'duke', 'loren']
 
-# Name-strip box in print-master pixels (1500x2464), measured from the rendered
-# window: the text runs vertically just inside the right edge of the photo area.
-BOX = (1225, 1320, 1450, 1800)
+# Name-strip box as FRACTIONS of the master, not pixels. The text runs vertically
+# just inside the right edge of the photo area.
+#
+# Fractional on purpose: this was absolute pixels measured against a 1500x2464
+# master, and silently pointed at the wrong region the moment the artwork arrived
+# on a different canvas. Same trap as TORN_TOP_FRAC in prepare-labels.py.
+# Widened after the numbers got longer: the text is rotated 90 degrees, so a
+# longer register number grows DOWNWARD in this frame, not sideways. The original
+# box clipped the two longest. Horizontal extent is fixed by the two stacked lines
+# and does not move.
+BOX_FRAC = (0.820, 0.550, 0.940, 0.825)
 GUTTER = 96          # space for the expected id, drawn beside each strip
 
 
@@ -34,7 +42,11 @@ def main(out):
         p = os.path.join(HERE, 'source', 'labels', f'{pid}.png')
         if not os.path.exists(p):
             sys.exit(f'missing {p} — run tools/prepare-labels.py first')
-        s = Image.open(p).crop(BOX).transpose(Image.ROTATE_270)
+        im = Image.open(p)
+        W, H = im.size
+        box = (round(BOX_FRAC[0] * W), round(BOX_FRAC[1] * H),
+               round(BOX_FRAC[2] * W), round(BOX_FRAC[3] * H))
+        s = im.crop(box).transpose(Image.ROTATE_270)
         strips.append((pid, s))
 
     w = max(s.width for _, s in strips) + GUTTER
