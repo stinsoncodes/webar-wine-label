@@ -115,7 +115,7 @@ export const CHARACTERS = {
   seth:     { name: 'Seth',     video: { file: 'Seth_1080p.mp4',     ...SHARED_CLIP } },
   kyle:     { name: 'Kyle',     video: { file: 'Kyle_1080p.mp4',     ...SHARED_CLIP } },
   scot:     { name: 'Scot',     video: { file: 'Scot_1080p.mp4',     ...SHARED_CLIP } },
-  julie:    { name: 'Julie',    video: { file: 'Julie_1080p.mp4',    ...SHARED_CLIP } },
+  julie:    { name: 'Julie',    video: { file: 'Julie_2.mp4',        ...SHARED_CLIP } },
   bo:       { name: 'Bo',       video: { file: 'bo-landscape.mp4',   ...SHARED_CLIP } },
   dan:      { name: 'Dan',      video: { file: 'Dan_1080p.mp4',      ...SHARED_CLIP } },
   jayshree: { name: 'Jayshree', video: { file: 'Jayshree_1080p.mp4', ...SHARED_CLIP } },
