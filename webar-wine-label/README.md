@@ -122,6 +122,11 @@ assets/labels/<label-id>/label-display.jpg   display-resolution still, for ?watc
 assets/characters/<char-id>/<file>.mp4       the talking clip
 ```
 
+One clip per character directory, and its name is whatever `CHARACTERS[id].video.file`
+says. Superseded takes are deleted rather than left beside the live one: nothing
+loads them, but they still ship to the CDN, and two files in a directory invite the
+wrong one being wired up later. Git keeps them if a take needs to come back.
+
 The two stills are the same warp at different sizes: `warp-targets.py` writes the
 500px one into `source/targets/` for compiling, and `--display` writes the 1000px
 one straight into `assets/labels/`. They must stay geometrically identical or the
