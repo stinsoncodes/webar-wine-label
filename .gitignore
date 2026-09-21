@@ -9,6 +9,10 @@ node_modules/
 # OneDrive conflict copies
 *conflicted copy*
 
+# tools/verify-names.py writes its contact sheet into the CWD by default, and the
+# documented invocation runs from here. It is a thing you LOOK at, not a record.
+names.png
+
 # PowerPoint slide exports — a reproducible intermediate, ~40MB.
 # The print masters in source/labels/ supersede these.
 19_Crimes_Quanta Edition_Front Label/

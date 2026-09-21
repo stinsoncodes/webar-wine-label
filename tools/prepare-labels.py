@@ -173,15 +173,21 @@ def main(src_dir):
         window.crop((fx0, 0, fx1, win_h)).save(os.path.join(fac_dir, f'{pid}.png'))
         print(f'{pid:<9} {str(label.size):>16} {str(window.size):>13} '
               f'{str((fx1-fx0, win_h)):>13}  {"ok" if ok else "FAIL"}')
-    if bad:
-        print(f'\n!! {bad} label(s) failed the torn-edge check — review before printing')
-
     print(f'\nprint masters -> source/labels/          ({len(PEOPLE)} files)')
     print(f'generator in  -> source/heygen/window/  ({len(PEOPLE)} files)')
     print(f'              -> source/heygen/face/    ({len(PEOPLE)} files)')
+    # Exit non-zero so a chained run stops here. The files are still written —
+    # the crops may well be fine and are worth looking at — but a stale
+    # TORN_TOP_FRAC crops every generator input in the wrong place, and the next
+    # steps are a paid video generation and a print run. Neither should start on
+    # the back of a warning nobody read.
+    if bad:
+        print(f'\n!! {bad} label(s) failed the torn-edge check — review before printing')
+        return 1
+    return 0
 
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         sys.exit(__doc__)
-    main(sys.argv[1])
+    sys.exit(main(sys.argv[1]))
