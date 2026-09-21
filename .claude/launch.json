@@ -2,9 +2,21 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "app",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "tools/serve.py",
+        "webar-wine-label",
+        "8790"
+      ],
+      "port": 8790
+    },
+    {
       "name": "compile-server",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["/private/tmp/claude-501/-Users-jstinson-Library-CloudStorage-OneDrive-QuantaServicesManagementPartnership-L-P-Personal--LorenProject/60a9c230-8c32-4414-8918-0aa7f7fa6455/scratchpad/compile3/compile-server.py", "/private/tmp/claude-501/-Users-jstinson-Library-CloudStorage-OneDrive-QuantaServicesManagementPartnership-L-P-Personal--LorenProject/60a9c230-8c32-4414-8918-0aa7f7fa6455/scratchpad/compile3"],
+      "runtimeArgs": [
+        "tools/compile-server.py"
+      ],
       "port": 8765
     }
   ]
