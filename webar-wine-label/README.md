@@ -95,6 +95,33 @@ its thirteen links to add `&watch=1`, and watch mode itself shows a Share button
 that hands the current URL — `as=` included — to the native share sheet. So a link
 sends what was actually on screen.
 
+### Pause / play, in watch mode only
+
+The clip loops for as long as the page is open, so watch mode carries a round
+pause button, bottom centre, clear of the two pills in the top corners. Someone
+who has heard the message should not have to close the tab to get their quiet
+back.
+
+AR gets no such button, deliberately: there, playback follows the bottle —
+`targetFound` starts the line, `targetLost` pauses it — and a control fighting the
+tracker for the same video element would only be confusing.
+
+Two details worth keeping:
+
+- **The icon is driven by the video element's `play`/`pause` events, not by the
+  click.** So it still tells the truth when something else stops the clip: a
+  backgrounded tab, or a character switch. Its `aria-label` flips with it, which is
+  what a screen reader reads.
+- **A deliberate pause outlasts a tab switch, but not a character switch.**
+  `userPaused` is separate from "the clip is not running", because backgrounding
+  the tab also pauses it and coming back should resume. Choosing someone from
+  "Who's talking?", though, is a request to hear *them* — so that clears the pause
+  rather than loading a new clip and leaving it silent.
+
+In `?tune=1` the alignment panel owns the bottom of the screen, so the button
+moves to the top centre for that one case rather than hiding behind it — otherwise
+`?watch=1&tune=1` would stop being a faithful view of what a recipient sees.
+
 Three things this deliberately does NOT do:
 
 - **It is never a default.** A printed QR encodes a bare `?wine=`; whoever scans it

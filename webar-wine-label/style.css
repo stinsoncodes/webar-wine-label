@@ -266,6 +266,38 @@ p.hint { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
 }
 #share-btn:active { background: rgba(40, 40, 48, .9); }
 
+/* Bottom centre, clear of the cast and share pills in the two top corners. Same
+   blurred-pill treatment as those, just round — it reads as a media control
+   without needing a caption. Watch mode only. */
+#play-btn {
+  position: fixed;
+  z-index: 12;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--fg);
+  background: rgba(10, 10, 12, .74);
+  border: 1px solid #3a3a44;
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+#play-btn:active { background: rgba(40, 40, 48, .9); }
+#play-btn svg { display: block; width: 21px; height: 21px; fill: currentColor; }
+/* The alignment panel owns the bottom of the screen, and ?watch=1&tune=1 is a
+   documented mode — so in that one case the button moves out of its way rather
+   than hiding behind it and making the recipient view unfaithful. */
+#play-btn.with-tuner {
+  top: calc(10px + env(safe-area-inset-top));
+  bottom: auto;
+}
+
 #cast {
   position: fixed;
   z-index: 25;

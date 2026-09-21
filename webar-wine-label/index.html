@@ -70,6 +70,12 @@
 <!-- Watch mode only: hands the current URL to the native share sheet, so sending
      someone their own link is one tap rather than a copy out of the address bar. -->
 <button id="share-btn" type="button" hidden>Share</button>
+<!-- Watch mode only: the clip loops, so there has to be a way to stop it. AR gets
+     no such button on purpose — there playback follows the bottle, and a control
+     fighting targetFound/targetLost would only confuse. Its accessible name is set
+     from the video element's own state, so it never disagrees with what is
+     happening. -->
+<button id="play-btn" type="button" hidden aria-label="Pause"></button>
 <div id="cast" hidden role="dialog" aria-modal="true" aria-labelledby="cast-title">
   <div class="cast-head">
     <b id="cast-title">Who's talking?</b>

@@ -245,7 +245,7 @@ let teardown = null
 function fatal (msg, { offerWatch = false } = {}) {
   $('fatal-msg').textContent = msg
   for (const id of ['gate', 'scan', 'starting', 'picker',
-                    'cast', 'cast-btn', 'share-btn', 'tune']) {
+                    'cast', 'cast-btn', 'share-btn', 'play-btn', 'tune']) {
     const el = $(id)
     if (el) el.hidden = true
   }
@@ -675,6 +675,11 @@ function buildScene () {
 
   // --- character switching --------------------------------------------------
 
+  // Whether the VIEWER asked for silence, which is not the same thing as the clip
+  // not running: backgrounding the tab pauses it too, and coming back from that
+  // should resume. Only ever set in watch mode — AR has no pause control.
+  let userPaused = false
+
   // Bumped on every switch. Two taps in quick succession leave two continuations
   // waiting on the same video element, and both wake when the *second* clip's
   // metadata arrives — so the first would then apply its own geometry and rewrite
@@ -705,6 +710,9 @@ function buildScene () {
     applyVideo()                          // panel height follows the new clip's aspect
     pushGain()
     if (locked || preview) {
+      // Choosing someone from "Who's talking?" is a request to hear them, so it
+      // clears a pause rather than loading a new clip and leaving it silent.
+      userPaused = false
       video.play().catch(() => {})
       if (!noAR) startMatching()
     }
@@ -956,11 +964,50 @@ function buildScene () {
     locked = true
     video.muted = false
     video.play().catch(e => console.warn('play blocked:', e.message))
-    // Never leave audio running in a backgrounded tab.
+    buildPlayPause()
+    // Never leave audio running in a backgrounded tab. Coming back resumes —
+    // unless the viewer had paused it themselves, which outlasts the tab switch.
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) video.pause()
-      else if (locked) video.play().catch(() => {})
+      else if (locked && !userPaused) video.play().catch(() => {})
     })
+  }
+
+  // Watch mode's clip loops for as long as the page is open, so there has to be a
+  // way to stop it — someone who has heard the message should not have to close
+  // the tab to get their quiet back.
+  function buildPlayPause () {
+    const btn = $('play-btn')
+    const ICON = {
+      pause: '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+             '<rect x="6" y="4" width="4" height="16" rx="1.2"/>' +
+             '<rect x="14" y="4" width="4" height="16" rx="1.2"/></svg>',
+      play:  '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+             '<path d="M8 4.7v14.6L20 12z"/></svg>',
+    }
+    // Driven by the element's own play/pause events rather than by the click, so
+    // the icon still tells the truth when something else stops the clip — a
+    // backgrounded tab, or a character switch.
+    const render = () => {
+      const playing = !video.paused
+      btn.innerHTML = playing ? ICON.pause : ICON.play
+      btn.setAttribute('aria-label', playing ? 'Pause' : 'Play')
+    }
+    video.addEventListener('play', render)
+    video.addEventListener('pause', render)
+    btn.addEventListener('click', () => {
+      if (video.paused) {
+        userPaused = false
+        video.play().catch(e => console.warn('play blocked:', e.message))
+      } else {
+        userPaused = true
+        video.pause()
+      }
+    })
+    // The alignment panel owns the bottom of the screen in ?tune=1.
+    if (q.get('tune')) btn.classList.add('with-tuner')
+    render()
+    btn.hidden = false
   }
 
   // Share whatever the URL actually says, ?as= included, so what arrives is what
