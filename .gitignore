@@ -24,3 +24,6 @@ names.png
 # The designer pack is a build artifact of tools/make-qr.py; regenerate it
 # rather than versioning a zip.
 source/qr-codes-for-designer.zip
+# Patched back-label deck: a build artifact of tools/patch-back-labels.py, and
+# *.pptx is ignored anyway. Regenerate rather than version a 2MB binary.
+source/*_QR-PLACED.pptx
