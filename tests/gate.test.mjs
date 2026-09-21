@@ -5,7 +5,7 @@
 // is whether Vercel actually invokes it — that only shows on a deployment.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LABELS } from '../webar-wine-label/wines.js'
@@ -136,6 +136,34 @@ test('the gate response is never cached or indexed', async () => {
   assert.match(res.headers.get('cache-control'), /no-store/)
   assert.match(res.headers.get('x-robots-tag'), /noindex/)
   assert.match(res.headers.get('content-type'), /text\/html/)
+})
+
+// --- the printed bottles must still open ------------------------------------
+
+test('every printed QR code opens without the code', async () => {
+  // The thirteen QR codes in source/qr/ are going onto glass. If a change to the
+  // gate rule ever stopped one of them opening, no reprint could fix the bottles
+  // already out. So the artwork itself is the fixture: parse the URL each SVG
+  // says it encodes and put it through the real middleware.
+  process.env.GATE_CODE = CODE
+  const mw = await load()
+  const dir = join(APP, '..', 'source', 'qr', 'svg')
+  const files = readdirSync(dir).filter(f => f.endsWith('.svg'))
+  assert.equal(files.length, Object.keys(LABELS).length,
+    `${files.length} QR codes for ${Object.keys(LABELS).length} labels`)
+
+  for (const f of files) {
+    const svg = readFileSync(join(dir, f), 'utf8')
+    const m = svg.match(/https?:\/\/[^\s"'<]+/)
+    assert.ok(m, `${f}: no encoded URL found in the SVG`)
+    const url = new URL(m[0])
+    const wine = url.searchParams.get('wine')
+    assert.ok(LABELS[wine], `${f} encodes wine=${wine}, which is not a label`)
+    assert.equal(f, `qr-${wine}.svg`, `${f} encodes someone else's id`)
+    // The bottle holder has no code to type, so this must pass untouched.
+    assert.equal(await mw(get(url.pathname + url.search)), undefined,
+      `${f} would be stopped by the code gate`)
+  }
 })
 
 // --- the two halves must agree ----------------------------------------------
