@@ -37,7 +37,7 @@ a-scene .a-canvas { background: transparent !important; }
 
 /* ---------- shared overlay shell ---------- */
 
-#picker, #gate, #fatal, #starting {
+#picker, #gate, #fatal, #starting, #code {
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -51,11 +51,41 @@ a-scene .a-canvas { background: transparent !important; }
 #gate { text-align: center; align-items: center; }
 #fatal { align-items: center; text-align: center; }
 #starting { align-items: center; text-align: center; gap: 18px; z-index: 19; }
+/* Above every other overlay: nothing behind it should be readable until the code
+   is in. */
+#code { align-items: center; text-align: center; gap: 16px; z-index: 40; }
 
 h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -0.01em; }
 h2 { font-size: 19px; margin: 0 0 8px; }
 p.sub { margin: 0 0 18px; color: var(--dim); font-size: 14.5px; }
 p.hint { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
+
+/* ---------- code gate ---------- */
+
+.code-inner { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 260px; }
+#code-form { display: flex; flex-direction: column; gap: 12px; }
+#code-input {
+  font: 600 22px/1 inherit;
+  text-align: center;
+  letter-spacing: .18em;
+  color: var(--fg);
+  background: #1b1b1f;
+  border: 1px solid #2e2e35;
+  border-radius: 12px;
+  padding: 16px;
+}
+#code-input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+#code-form button {
+  font: 600 16px/1 inherit;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 999px;
+  padding: 16px;
+  cursor: pointer;
+}
+#code-form button:active { filter: brightness(0.86); }
+p.hint.bad { color: #e2706c; }
 
 /* ---------- picker ---------- */
 

@@ -22,6 +22,22 @@
 <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
+<!-- Code gate, in-page half. middleware.js gates the same screens at the edge and
+     serves its own copy of this screen; this one is what runs if middleware is not
+     active, and it is also what clears the overlay once the cookie is set. Shown
+     only when there is no valid ?wine= — a printed QR never reaches it. -->
+<div id="code" hidden>
+  <div class="code-inner">
+    <p class="hint" id="code-ask">Enter the code to continue.</p>
+    <form id="code-form">
+      <input id="code-input" name="code" inputmode="numeric" autocomplete="off"
+             aria-label="Code">
+      <button type="submit">Continue</button>
+    </form>
+    <p class="hint bad" id="code-bad" hidden role="alert">That&rsquo;s not it.</p>
+  </div>
+</div>
+
 <!-- Label picker: shown when no ?wine= is given, or the id isn't in the manifest. -->
 <div id="picker" hidden>
   <h1>Talking Wine Label</h1>

@@ -21,6 +21,12 @@ handler does not answer Range requests, and a `<video>` wants them. Note that AR
 itself needs a secure context, so the camera path only works on `localhost` or
 over HTTPS — a phone pointed at your laptop's LAN address gets no camera.
 
+`tests/gate.test.mjs` runs the real middleware under Node — it is a plain ES
+module over Request/Response/crypto.subtle, so its logic is directly testable.
+What no local test can tell you is whether Vercel actually *invokes* it; that only
+shows on a deployment. `tools/serve.py` does not run middleware, so locally you
+are always testing the in-page half.
+
 `tests/manifest.test.mjs` is the one to run before every deploy. The ids in
 `wines.js` are baked into printed QR codes, so a bottle pointing at a missing clip
 cannot be fixed by reprinting. It checks that every label and character in the
@@ -70,7 +76,65 @@ half is byte-identical, so roughly half of every target's features are shared wi
 other twelve. Harmless as separate files, since only one is ever loaded — but combined,
 they would cross-match constantly.
 
-With no `?wine=`, or an unknown id, the app shows a picker listing every label.
+With no `?wine=`, or an unknown id, the app shows a picker listing every label —
+behind a code, see below.
+
+## The code gate
+
+```
+?wine=loren              a printed QR, or a link you sent. No code.
+/                        the picker. Code required.
+?watch=1                 the picker, set to watch. Code required.
+?wine=nope               unknown id, so it is the picker. Code required.
+```
+
+**Only the picker is gated.** A URL carrying a known `?wine=` was handed to
+somebody deliberately — printed on a bottle, or sent by message — so it opens
+straight into the bottle or watch flow with no code. The bare root is the one
+surface a stranger can land on, and it is also the screen that would otherwise
+list all thirteen names, which is why it is the thing worth closing.
+
+Answering the code is remembered per browser, in `localStorage` and a cookie, so
+it is asked once per device.
+
+There are two halves, and they gate on the same rule:
+
+| | |
+|---|---|
+| `middleware.js` | Vercel Edge Middleware. Returns its own self-contained code screen, reads the code from `GATE_CODE`, and never sends it to the browser. |
+| `app.js` | The same screen in-page, for when middleware is not running. This half **contains** the code, in `CODE`. |
+
+**Turning it on and off.** With `GATE_CODE` unset the middleware does nothing
+whatsoever, so deploying it cannot change how the site behaves. Set `GATE_CODE`
+in the Vercel project to arm it; unset it to disarm without a deploy. The in-page
+half is always on — change `CODE` in `app.js` to match, or the two disagree.
+
+Changing `GATE_CODE` invalidates every cookie issued under the old one, because
+the cookie value is derived from the code rather than stored at the edge.
+
+### What this is and is not
+
+It is a **deterrent against stumbling**, which is what it was asked to be. It is
+not a lock, and three things are worth being explicit about:
+
+- **`app.js` carries the code**, because a client-side check cannot do otherwise,
+  and anyone can read it. The middleware half is the one that keeps the code
+  server-side, and it is also the only half that can reject a forged cookie.
+- **`/assets` is not gated, by either half.** It cannot be: a legitimate QR scan
+  arrives with no cookie and immediately needs `app.js`, `wines.js`, a `.mind`
+  and an mp4. Gating those on a cookie would also blank the page in any webview
+  that blocks cookies — much worse than the exposure. The clips stay fetchable by
+  direct URL, with `robots.txt` and `X-Robots-Tag` their only cover, as before.
+- **`wines.js` still lists all thirteen names** to anyone who fetches it
+  directly, for the same reason: a `?wine=` visitor needs it, cast selector
+  included. The gate stops the *picker* from showing them, not the manifest from
+  being readable.
+- **A two-digit code is 100 guesses.** Ample against accidental discovery,
+  nothing against a script. Both halves take any string, so a longer code costs
+  nothing but retyping it in two places.
+
+There is no rate limiting. Adding it would mean state at the edge, which for a
+deterrent is not worth it.
 
 ## Watch mode — for people who don't have a bottle
 

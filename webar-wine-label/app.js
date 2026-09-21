@@ -136,11 +136,65 @@ const wantedLabel = q.get('wine')
 const label = wantedLabel ? LABELS[wantedLabel] : null
 const initialChar = q.get('as') && CHARACTERS[q.get('as')] ? q.get('as') : wantedLabel
 
+// ---------------------------------------------------------------------------
+// Code gate, in-page half
+//
+// middleware.js gates the same thing at the edge and never sends the code to the
+// browser. This half exists for the case where middleware is not running — an
+// unset GATE_CODE, or a host that does not support it — and as the thing that
+// clears the overlay once the edge has already let you through.
+//
+// It is a DETERRENT, not a lock: the code is in this file, which anybody can
+// read, and /assets was never gated by either half. It stops somebody stumbling
+// onto the site, which is what it is for.
+//
+// Only the picker is gated. A printed QR encodes ?wine=<id> and a sent watch link
+// carries one too, so neither ever reaches this screen — the same rule
+// middleware.js applies, and tests/gate.test.mjs checks the two agree.
+// ---------------------------------------------------------------------------
+
+const CODE = '26'
+const PASS_KEY = 'pass'
+const PASS_COOKIE = 'wl_pass'
+
+function hasPass () {
+  // Either half will do. The edge sets a cookie this cannot verify — it is not
+  // meant to; a forged cookie gets past this half and still fails at the edge,
+  // which is where verifying belongs.
+  if (stored(PASS_KEY) === '1') return true
+  return document.cookie.split(';').some(c => c.trim().startsWith(PASS_COOKIE + '='))
+}
+
+function showCode () {
+  const el = $('code')
+  const input = $('code-input')
+  $('code-form').addEventListener('submit', e => {
+    e.preventDefault()
+    if (input.value.trim() !== CODE) {
+      $('code-bad').hidden = false
+      input.select()
+      return
+    }
+    store(PASS_KEY, '1')
+    // Same cookie the edge would set, so a later visit is let through server-side
+    // too rather than stopping at a screen this browser has already answered.
+    document.cookie = `${PASS_COOKIE}=1; Path=/; Max-Age=31536000; SameSite=Lax`
+    el.hidden = true
+    boot()
+  })
+  el.hidden = false
+  input.focus()
+}
+
 // Dispatch happens in boot(), called at the very bottom of this module. The video
 // element and the scene state below are const/let declarations, so calling start()
 // from here would hit their temporal dead zone.
 function boot () {
-  if (!label) {
+  if (!label && !hasPass()) {
+    // No valid ?wine=, so this is the picker — the one screen a stranger can
+    // land on, and the one that would list all thirteen names.
+    showCode()
+  } else if (!label) {
     showPicker(wantedLabel ? `No label called “${wantedLabel}”.` : null)
   } else if (q.get('preview') === '1') {
     start()        // no camera, muted video: nothing needs a user gesture
