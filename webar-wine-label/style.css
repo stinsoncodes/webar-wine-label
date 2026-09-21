@@ -37,7 +37,7 @@ a-scene .a-canvas { background: transparent !important; }
 
 /* ---------- shared overlay shell ---------- */
 
-#picker, #gate, #fatal {
+#picker, #gate, #fatal, #starting {
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -50,6 +50,7 @@ a-scene .a-canvas { background: transparent !important; }
 
 #gate { text-align: center; align-items: center; }
 #fatal { align-items: center; text-align: center; }
+#starting { align-items: center; text-align: center; gap: 18px; z-index: 19; }
 
 h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -0.01em; }
 h2 { font-size: 19px; margin: 0 0 8px; }
@@ -103,7 +104,10 @@ p.hint { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
 }
 .wine:active { background: #24242b; }
 .wine b { display: block; font-size: 17px; }
-.wine span { font-size: 13.5px; color: var(--dim); }
+/* display:block on the subtitle too, so its line box is its own 13.5px one rather
+   than the 16px block strut of the row around it. Without it standards mode makes
+   every row 4px taller than the design; quirks mode used to hide the difference. */
+.wine span { display: block; font-size: 13.5px; color: var(--dim); }
 
 /* ---------- tap gate ---------- */
 
@@ -122,6 +126,39 @@ p.hint { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
   max-width: 300px;
 }
 #gate-btn:active { filter: brightness(0.86); }
+
+/* ---------- failure screen ---------- */
+
+/* A failure with no way forward is the worst outcome: someone who declined the
+   camera prompt can still watch on screen, and someone who hit a slow network
+   just needs to try again. */
+#fatal p { margin: 0 0 22px; color: var(--dim); max-width: 330px; }
+#fatal-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; }
+#fatal-actions button {
+  font: 600 15px/1 inherit;
+  color: var(--fg);
+  background: #26262e;
+  border: 1px solid #3a3a44;
+  border-radius: 999px;
+  padding: 15px 22px;
+  cursor: pointer;
+}
+#fatal-actions button.primary { color: #fff; background: var(--accent); border-color: transparent; }
+#fatal-actions button:active { filter: brightness(0.86); }
+
+/* ---------- starting ---------- */
+
+#starting p { margin: 0; color: var(--dim); font-size: 14.5px; }
+.spinner {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 2.5px solid #33333b;
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+}
 
 /* ---------- scanning prompt ---------- */
 
@@ -259,7 +296,7 @@ p.hint { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
 }
 .cast-item:active:not(:disabled) { background: #24242b; }
 .cast-item b { display: block; font-size: 15.5px; }
-.cast-item span { font-size: 12.5px; color: var(--dim); }
+.cast-item span { display: block; font-size: 12.5px; color: var(--dim); }   /* see .wine span */
 .cast-item.on { border-color: var(--accent); background: #241a1b; }
 .cast-item.on b::after { content: ' ·  now playing'; color: var(--accent); font-weight: 400; font-size: 12.5px; }
 .cast-item:disabled { opacity: .42; }

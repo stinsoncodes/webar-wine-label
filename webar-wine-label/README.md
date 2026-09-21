@@ -5,6 +5,32 @@ the label talks. One app, many wines.
 
 Deployed from this directory (Vercel Root Directory = `webar-wine-label`).
 
+## Running it locally, and the checks
+
+```bash
+python3 tools/serve.py webar-wine-label 8790   # then http://localhost:8790
+node --test "tests/*.test.mjs"                 # manifest + geometry
+python3 tools/warp-targets.py --test           # the projection maths
+```
+
+All three run from the **repo root**, not from here. There is no build step
+and nothing to install.
+
+`tools/serve.py` rather than `python3 -m http.server` for one reason: the stock
+handler does not answer Range requests, and a `<video>` wants them. Note that AR
+itself needs a secure context, so the camera path only works on `localhost` or
+over HTTPS — a phone pointed at your laptop's LAN address gets no camera.
+
+`tests/manifest.test.mjs` is the one to run before every deploy. The ids in
+`wines.js` are baked into printed QR codes, so a bottle pointing at a missing clip
+cannot be fixed by reprinting. It checks that every label and character in the
+manifest has the files it names, that `target.w/h` still matches the compiled
+image (a wrong ratio stretches everything), that each character directory holds
+exactly one clip, that every clip is faststart and carries an audio track, and
+that no surname ever lands in the manifest that is served verbatim to viewers.
+Each of those has a corresponding way to go wrong that a human would not notice
+until a viewer did.
+
 ---
 
 ## Labels and characters are separate things
@@ -108,6 +134,11 @@ Everything that exists only because of tracking keys off `noAR` in `app.js` —
 MindAR, the target anchor, the scan prompt, the exposure matcher. Only the muting
 keys off `preview` alone.
 
+The spinner comes down on the scene's own `loaded` event rather than when
+`buildScene()` returns: `<a-assets>` holds initialisation until the clip and the
+still are ready (A-Frame caps that wait at 3s and warns when it lapses), so
+clearing it any earlier puts a black screen in the gap.
+
 Because there is no camera, the view is framed by moving our own camera back far
 enough to fit the label, which depends on the viewport aspect — so it re-fits on
 resize and orientationchange. Without that, a rotated phone or a narrow desktop
@@ -183,6 +214,11 @@ For a label that exists as PowerPoint artwork (the personalised set):
    baked into printed labels — pick one you can live with and never change it.
 
 No changes to `app.js` at any point.
+
+`geometry.js` holds the two pure functions — `curveFromBottle` and
+`normaliseFeather` — that carry the bottle maths and the `feather` shorthand. They
+live outside `app.js` only so `tests/geometry.test.mjs` can import them: `app.js`
+registers A-Frame components at module scope and cannot be loaded outside a page.
 
 For a label that only exists physically, photograph it on the bottle straight on, crop
 tight (background in the target gets learned and then isn't there at runtime), and skip
@@ -307,6 +343,23 @@ the curve) and `bottle.diameterMm` derive the half-arc angle exactly:
 `asin((chord/2)/(diameter/2))`. Storing those two inputs rather than the resulting
 angle means a new bottle shape is a data change, and nobody has to re-guess later.
 A standard 750 ml Bordeaux is 76 mm.
+
+**Failure is never a dead end.** The likeliest thing to go wrong is not a bug:
+it is a declined camera prompt, or the link being opened inside an app whose
+webview has no camera at all. The clip plays perfectly well without a camera, so
+`arError` offers **Watch on screen instead** — which is just `&watch=1` added to
+the URL in hand — alongside *Try again* and *Choose another*. Every `fatal()` also
+pauses the video and stops the exposure sampler, so nothing keeps talking behind
+an error screen, and hides the cast and share buttons, which no longer control
+anything.
+
+The slow-start case is deliberately *not* a failure. Between the gate tap and a
+live scene there is a clip's metadata to fetch and a camera to open, which used to
+be an unexplained black screen; it now shows a spinner. If twelve seconds pass with
+no `arReady`, the spinner rewords itself to mention the permission prompt — it
+never escalates to an error, because the commonest reason for a long wait is a
+prompt nobody has answered yet, and stranding someone on a dismissable-by-nothing
+error screen one second before they tap Allow would be worse than waiting.
 
 **Never give `body` a background.** MindAR inserts its camera feed as a `<video>` at
 `z-index: -2`. A background on the *root* element paints into the viewport canvas

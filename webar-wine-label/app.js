@@ -1,4 +1,5 @@
 import { LABELS, CHARACTERS, DEFAULT_MATCH, DEFAULT_TRACKING } from './wines.js'
+import { curveFromBottle, normaliseFeather } from './geometry.js'
 
 const $ = id => document.getElementById(id)
 const q = new URLSearchParams(location.search)
@@ -119,36 +120,6 @@ function panel (width, height, curve) {
   return el
 }
 
-// Half-arc angle, in degrees, that a chord of `chordMm` subtends on a cylinder of
-// `diameterMm`. Lets a manifest state the two things that are actually measurable
-// about a bottle rather than a magic angle nobody can re-derive later.
-function curveFromBottle (chordMm, diameterMm) {
-  if (!chordMm || !diameterMm) return 0
-  const s = (chordMm / 2) / (diameterMm / 2)
-  if (!(s > 0)) return 0
-  if (s > 1.001) {
-    console.warn(`chordMm ${chordMm} exceeds bottle diameter ${diameterMm}; curve disabled`)
-    return 0
-  }
-  // s == 1 is a label wrapping exactly to the silhouette — real, and 90deg is the
-  // right answer. Clamp just below to keep asin and the 1/sin in the geometry finite.
-  return Math.asin(Math.min(s, 0.9999)) * 180 / Math.PI
-}
-
-// `feather` may be a scalar, {top, side, bottom}, or {top, right, bottom, left}.
-// Always returns all four, in label-width units, CSS order.
-function normaliseFeather (f) {
-  if (typeof f === 'number') return { top: f, right: f, bottom: f, left: f }
-  if (!f) return { top: 0, right: 0, bottom: 0, left: 0 }
-  const side = f.side ?? 0
-  return {
-    top:    f.top    ?? 0,
-    right:  f.right  ?? side,
-    bottom: f.bottom ?? 0,
-    left:   f.left   ?? side,
-  }
-}
-
 const labelDir = id => `assets/labels/${id}`
 const charDir  = id => `assets/characters/${id}`
 
@@ -227,8 +198,13 @@ function showPicker (hint) {
       ? 'Choose who you would like to hear from.'
       : 'Scan the code on a bottle, or choose one.'
     if (!modeEl) return
-    modeEl.querySelectorAll('button').forEach(b =>
-      b.classList.toggle('on', b.dataset.mode === mode))
+    modeEl.querySelectorAll('button').forEach(b => {
+      const on = b.dataset.mode === mode
+      b.classList.toggle('on', on)
+      // Two toggle buttons, not a radio group: without aria-pressed a screen
+      // reader reads them as two plain buttons and never says which is active.
+      b.setAttribute('aria-pressed', on ? 'true' : 'false')
+    })
     $('mode-note').hidden = mode !== 'watch'
     store('mode', mode)
   }
@@ -256,11 +232,60 @@ function store (k, v) {
   try { localStorage.setItem('wl-' + k, v) } catch { /* private mode */ }
 }
 
-function fatal (msg) {
+// A failure screen with no way forward is the worst outcome this app can reach.
+// Someone who declines the camera prompt — or who opened the link inside an app
+// whose webview has no camera at all — can still watch the clip on screen, and a
+// slow network just needs another go. So every fatal stops the media, hides the
+// overlays that are now lying, and offers whatever is still possible.
+//
+// `teardown` is set by buildScene once the sampler and the scene exist; fatal can
+// be raised before that, so it stays optional.
+let teardown = null
+
+function fatal (msg, { offerWatch = false } = {}) {
   $('fatal-msg').textContent = msg
+  for (const id of ['gate', 'scan', 'starting', 'picker',
+                    'cast', 'cast-btn', 'share-btn', 'tune']) {
+    const el = $(id)
+    if (el) el.hidden = true
+  }
+  // Never leave a clip audible behind an error screen.
+  video.pause()
+  if (teardown) { teardown(); teardown = null }
+
+  const host = $('fatal-actions')
+  if (host) {
+    host.textContent = ''
+    const act = (text, primary, go) => {
+      const b = document.createElement('button')
+      b.type = 'button'
+      b.textContent = text
+      if (primary) b.className = 'primary'
+      b.addEventListener('click', go)
+      host.appendChild(b)
+    }
+    // Only offered when the camera is what failed and the clip itself is fine.
+    if (offerWatch && wantedLabel && LABELS[wantedLabel]) {
+      act('Watch on screen instead', true, () => {
+        const u = new URL(location.href)
+        u.searchParams.set('watch', '1')
+        u.searchParams.delete('preview')
+        location.href = u.toString()
+      })
+    }
+    act('Try again', !offerWatch, () => location.reload())
+    if (labelIds.length > 1) act('Choose another', false, () => { location.href = './' })
+  }
   $('fatal').hidden = false
-  $('gate').hidden = true
-  $('scan').hidden = true
+}
+
+// Shown from the gate tap until the scene is actually up. Without it the page is
+// simply black for as long as the clip's metadata and the camera take — several
+// seconds on a phone, indistinguishable from the tap not having registered.
+function starting (msg) {
+  if (msg === null) { $('starting').hidden = true; return }
+  $('starting-msg').textContent = msg
+  $('starting').hidden = false
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +336,7 @@ video.crossOrigin = 'anonymous'
 
 async function start () {
   $('gate').hidden = true
+  starting('Starting\u2026')
 
   const char = CHARACTERS[initialChar]
   if (!char || !char.video) {
@@ -339,24 +365,33 @@ async function start () {
   if (video.readyState < 1) {
     try {
       await once(video, 'loadedmetadata', 12000)
-    } catch {
-      fatal(`Couldn't load ${char.video.file}. Check that ${charDir(initialChar)}/ is complete.`)
+    } catch (e) {
+      // A timeout is a slow connection far more often than a missing file, and
+      // the two want different words: one is worth retrying, the other is not.
+      fatal(e.message === 'timeout'
+        ? `${char.name}'s clip is taking too long to load. Check your connection and try again.`
+        : `Couldn't load ${char.video.file}. Check that ${charDir(initialChar)}/ is complete.`)
       return
     }
   }
   buildScene()
 }
 
+// The timeout path has to unwire the listeners too. Leaving them attached means a
+// later event on the same element — and there is only ever one video element —
+// settles a promise nobody is waiting on, and holds the closure alive with it.
 function once (el, ev, ms) {
   return new Promise((res, rej) => {
-    const t = setTimeout(() => rej(new Error('timeout')), ms)
-    const done = () => { clearTimeout(t); cleanup(); res() }
-    const fail = () => { clearTimeout(t); cleanup(); rej(new Error('error')) }
     const cleanup = () => {
-      el.removeEventListener(ev, done); el.removeEventListener('error', fail)
+      clearTimeout(t)
+      el.removeEventListener(ev, done)
+      el.removeEventListener('error', fail)
     }
-    el.addEventListener(ev, done, { once: true })
-    el.addEventListener('error', fail, { once: true })
+    const done = () => { cleanup(); res() }
+    const fail = () => { cleanup(); rej(new Error('error')) }
+    const t = setTimeout(() => { cleanup(); rej(new Error('timeout')) }, ms)
+    el.addEventListener(ev, done)
+    el.addEventListener('error', fail)
   })
 }
 
@@ -366,8 +401,10 @@ async function loadClip (charId) {
   try {
     await once(video, 'loadedmetadata', 12000)
     return true
-  } catch {
-    fatal(`Couldn't load ${c.video.file}. Check that ${charDir(charId)}/ is complete.`)
+  } catch (e) {
+    fatal(e.message === 'timeout'
+      ? `${c.name}'s clip is taking too long to load. Check your connection and try again.`
+      : `Couldn't load ${c.video.file}. Check that ${charDir(charId)}/ is complete.`)
     return false
   }
 }
@@ -521,6 +558,11 @@ function buildScene () {
     // panel. Set flatSource: false for a clip that is already projected.
     flatSource = v.flatSource !== false && q.get('unwarp') !== '0'
     const o = allowOverrides ? num : (_k, d) => d
+    // Reset first: feather belongs to the clip when the clip says so and to the
+    // label otherwise. Without this, switching from a character that overrides it
+    // to one that does not would keep the previous character's edges — invisible
+    // today only because all thirteen share one value.
+    feather = readFeather(label.feather)
     crop = {
       x: o('cx', v.crop?.x ?? 0), y: o('cy', v.crop?.y ?? 0),
       w: o('cw', v.crop?.w ?? 1), h: o('ch', v.crop?.h ?? 1),
@@ -633,9 +675,16 @@ function buildScene () {
 
   // --- character switching --------------------------------------------------
 
+  // Bumped on every switch. Two taps in quick succession leave two continuations
+  // waiting on the same video element, and both wake when the *second* clip's
+  // metadata arrives — so the first would then apply its own geometry and rewrite
+  // the URL on top of the newer one, describing a clip that is no longer playing.
+  let switchToken = 0
+
   async function setCharacter (id) {
     if (id === charId || !CHARACTERS[id] || !CHARACTERS[id].video) return
     const was = charId
+    const token = ++switchToken
     charId = id
     stopMatching()
     gain = [1, 1, 1]                      // previous character's exposure is meaningless
@@ -646,8 +695,11 @@ function buildScene () {
     // label show through for the ~200ms instead, which reads better anyway.
     front.object3D.visible = false
     const ok = await loadClip(id)
-    front.object3D.visible = true
+    if (token !== switchToken) return       // superseded by a later tap
+    // Left hidden on failure: the src now points at a clip that would not load,
+    // and showing the panel would render whatever stale frame is in the texture.
     if (!ok) { charId = was; return }
+    front.object3D.visible = true
 
     readCharacter(id, false)
     applyVideo()                          // panel height follows the new clip's aspect
@@ -706,7 +758,12 @@ function buildScene () {
     $('cast-btn').hidden = false
     $('cast-btn').addEventListener('click', () =>
       $('cast').hidden ? openCast() : closeCast())
-    $('cast-close').addEventListener('click', closeCast)
+    $('cast-close').addEventListener('click', () => closeCast())
+    // A sheet you can open and not close is a trap for anyone on a keyboard or a
+    // screen reader, and Escape is what they will reach for.
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !$('cast').hidden) closeCast()
+    })
   }
 
   function markCast () {
@@ -715,8 +772,21 @@ function buildScene () {
     $('cast-btn').textContent = CHARACTERS[charId].name
   }
 
-  function openCast  () { $('cast').hidden = false }
-  function closeCast () { $('cast').hidden = true }
+  function openCast () {
+    $('cast').hidden = false
+    $('cast-btn').setAttribute('aria-expanded', 'true')
+    // Move focus into the sheet, or a keyboard user carries on tabbing the page
+    // behind it with no idea anything opened.
+    $('cast-close').focus()
+  }
+  function closeCast () {
+    // Read this BEFORE hiding: once the sheet is display:none the browser has
+    // already moved focus off it, and there would be nothing left to test.
+    const wasInside = document.activeElement && $('cast').contains(document.activeElement)
+    $('cast').hidden = true
+    $('cast-btn').setAttribute('aria-expanded', 'false')
+    if (wasInside) $('cast-btn').focus()
+  }
 
   // --- exposure matching ----------------------------------------------------
   //
@@ -830,6 +900,17 @@ function buildScene () {
   // --- tracking events ------------------------------------------------------
 
   function wireTracking () {
+    // uiLoading is off, so MindAR says nothing at all while it works. A long wait
+    // here is usually a camera prompt the user has not answered yet, so this
+    // only ever REWORDS the spinner — it must never become a failure screen.
+    // Doing so would strand someone who then taps Allow on an error they can no
+    // longer dismiss, and arError already covers a camera that truly cannot open.
+    let up = false
+    const nudge = setTimeout(() => {
+      if (!up) starting('Still starting\u2026 if your browser asked to use the camera, choose Allow.')
+    }, 12000)
+    const running = () => { up = true; clearTimeout(nudge); starting(null) }
+
     anchor.addEventListener('targetFound', () => {
       locked = true
       $('scan').hidden = true
@@ -846,9 +927,18 @@ function buildScene () {
       // happens to be pointed at and yank the exposure before the next lock.
       stopMatching()
     })
-    scene.addEventListener('arReady', () => { if (!locked) $('scan').hidden = false })
+    scene.addEventListener('arReady', () => {
+      running()
+      if (!locked) $('scan').hidden = false
+    })
     scene.addEventListener('arError', () => {
-      fatal('Camera unavailable. Check that the browser has camera permission and that no other app is using it.')
+      running()
+      // The clip itself is fine here — only the camera is missing — so watch mode
+      // is a real answer rather than a consolation. This is the likeliest failure
+      // the app has: a declined permission prompt, or an in-app webview that has
+      // no camera to offer.
+      fatal('Camera unavailable. Check that the browser has camera permission and that no other app is using it.',
+        { offerWatch: true })
     })
     // Never leave audio running — or keep sampling — in a backgrounded tab.
     document.addEventListener('visibilitychange', () => {
@@ -983,6 +1073,10 @@ function buildScene () {
   // function body: calling earlier reaches const/let bindings further down the
   // file that are still in their temporal dead zone — which is exactly how
   // buildCast() ended up crashing on closeCast.
+
+  // So a fatal() raised from anywhere can stop the sampler and the audio.
+  teardown = () => { stopMatching(); video.pause() }
+
   if (!noAR) wireTracking()
   else if (preview) {
     $('scan').hidden = true
@@ -1005,6 +1099,13 @@ function buildScene () {
     }
     window.addEventListener('resize', refit)
     window.addEventListener('orientationchange', refit)
+
+    // a-assets holds scene init until the clip and the still are ready, so the
+    // spinner has to come down on the scene's own loaded event rather than when
+    // this function returns — otherwise it clears seconds before anything renders
+    // and the screen goes black in between.
+    if (scene.hasLoaded) starting(null)
+    else scene.addEventListener('loaded', () => starting(null), { once: true })
   }
   buildCast()
   if (watch) buildShare()

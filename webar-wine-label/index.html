@@ -1,3 +1,5 @@
+<!doctype html>
+<html lang="en">
 <!-- Scene markup is built in app.js from the wines.js manifest, because the target
      count, asset paths and plane geometry all vary per wine. Declaring anchors in
      static markup would mean one hand-edited page per bottle. -->
@@ -9,6 +11,9 @@
      (vercel.json) say the same thing; this covers a crawler that reads neither. -->
 <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
 <title>Talking Wine Label</title>
+<!-- Inline so it costs no request and cannot 404. A link to this page is sent by
+     message as often as it is scanned, so it needs an icon of its own. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0d0f'/%3E%3Cpath d='M13 5h6v7l3 5v10H10V17l3-5z' fill='%23b8332f'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="./style.css">
 
 <!-- Pinned deliberately. mind-ar 1.2.5 is tested against A-Frame 1.3.0; an
@@ -25,8 +30,8 @@
        never affects a ?wine= link arriving from a printed QR code, which must
        always open the AR view. -->
   <div id="mode" role="group" aria-label="How to watch">
-    <button type="button" data-mode="ar" class="on">I have the bottle</button>
-    <button type="button" data-mode="watch">No bottle</button>
+    <button type="button" data-mode="ar" class="on" aria-pressed="true">I have the bottle</button>
+    <button type="button" data-mode="watch" aria-pressed="false">No bottle</button>
   </div>
   <p class="hint" id="mode-note" hidden>
     Plays on screen &mdash; no bottle and no camera needed.
@@ -45,6 +50,14 @@
   </div>
 </div>
 
+<!-- Shown from the gate tap until the scene is actually up. Without it the page
+     goes black for as long as the clip's metadata and the camera take, which on a
+     phone is several seconds of looking like nothing happened. -->
+<div id="starting" hidden role="status">
+  <div class="spinner" aria-hidden="true"></div>
+  <p id="starting-msg">Starting…</p>
+</div>
+
 <!-- Scanning prompt while the tracker searches. -->
 <div id="scan" hidden>
   <div class="reticle"><span></span><span></span><span></span><span></span></div>
@@ -53,20 +66,30 @@
 
 <!-- Cast selector. ?wine= fixes which label is tracked; this only changes whose
      clip plays on it, so the lock is never dropped. -->
-<button id="cast-btn" type="button" hidden></button>
+<button id="cast-btn" type="button" hidden aria-expanded="false" aria-controls="cast"></button>
 <!-- Watch mode only: hands the current URL to the native share sheet, so sending
      someone their own link is one tap rather than a copy out of the address bar. -->
 <button id="share-btn" type="button" hidden>Share</button>
-<div id="cast" hidden>
+<div id="cast" hidden role="dialog" aria-modal="true" aria-labelledby="cast-title">
   <div class="cast-head">
-    <b>Who's talking?</b>
+    <b id="cast-title">Who's talking?</b>
     <button id="cast-close" type="button">Done</button>
   </div>
   <p class="cast-note">Plays any character on the bottle in your hand.</p>
   <div id="cast-list"></div>
 </div>
 
-<div id="fatal" hidden><div><h2>Can't start</h2><p id="fatal-msg"></p></div></div>
+<!-- A dead end is the worst outcome here: someone who declines the camera prompt,
+     or opens the link inside an app whose webview has no camera, can still watch
+     the clip on screen. So the failure screen offers that rather than just
+     apologising. role=alert so a screen reader announces it. -->
+<div id="fatal" hidden role="alert">
+  <div>
+    <h2>Can't start</h2>
+    <p id="fatal-msg"></p>
+    <div id="fatal-actions"></div>
+  </div>
+</div>
 
 <!-- Alignment panel, ?tune=1. Nudges plane geometry live and prints a manifest
      snippet to paste back into wines.js. -->
