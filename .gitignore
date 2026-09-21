@@ -20,3 +20,7 @@ names.png
 # Source artwork. Large (~100MB each) and carries full names and employer
 # branding. The print masters in source/labels/ are the committed record.
 *.pptx
+
+# The designer pack is a build artifact of tools/make-qr.py; regenerate it
+# rather than versioning a zip.
+source/qr-codes-for-designer.zip
